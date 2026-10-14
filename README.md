@@ -85,7 +85,7 @@ Natural math expressions mix explicit operators (`2 * x + 3`) with implicit juxt
 
 ## Scenario Workbooks
 
-The selector includes seven additional educational workbooks, defined in `workbooks.js`:
+The selector includes nine additional educational workbooks (12 built-in workbooks in total), defined in `workbooks.js`:
 
 | Workbook | Exact examples | Deliberate boundaries |
 | --- | --- | --- |
@@ -95,7 +95,9 @@ The selector includes seven additional educational workbooks, defined in `workbo
 | Physics Energy, Momentum & Dimensions | Kinetic and spring energy, exact speed from energy, pressure, volume conversion and dimensional cancellation | Irrational roots, unit-bearing equations an[...]
 | Financial Risk & Stress Scenarios | A discrete loss distribution, a selected 95% VaR cutoff, worst-5% expected shortfall, credit losses, hedge sizing and portfolio variance | Irrational volatili[...]
 | Precision & Guardrail Stress Lab | Large integers, repeating primes, terminating decimals and parser precedence | Fractional powers, exponent limits, nonlinear equations and incompatible dimensi[...]
-| Beyond Excel’s Native Numbers | 30-digit integer arithmetic, tiny increments, exact repeating fractions, values above/below Excel’s native range, exact large square roots and SI tracking | A[...]
+| Exact Numbers & Numeric Boundaries | 30-digit integer arithmetic, tiny increments, exact repeating fractions, values above/below Excel’s native range, exact large square roots and SI tracking | A[...]
+| Rocket Ascent & Exact Time Steps | Changing-mass Euler steps, thrust solving and a coast apex | Integration error, nonlinear solving and exponential atmosphere |
+| Deep Decimals & Cancellation Audit | 100-place decimal, cancellation, unstable affine recurrence, prime ratios and SI energy | Float64 drift and incompatible dimensions |
 
 Select a row to read its explanation and expected Exact Auto output in the workbook guide. Amber boundary cells are intentional rejections. Unsupported, undefined and failed calculations display t[...]
 
@@ -113,13 +115,38 @@ To remove a saved workbook, select it under **My workbooks**, click **Delete Wor
 
 Workbook 11 is inspired by the [Math.js rocket trajectory example](https://mathjs.org/examples/browser/rocket_trajectory_optimization.html.html). It follows three half-second explicit Euler steps[...]
 
-### What differs from Excel
+### Verified exact arithmetic and Float64 comparisons
 
-Workbook 10 compares AliceMath with Excel's ordinary worksheet numeric engine. Microsoft documents [15-digit numeric precision and finite numeric limits](https://support.microsoft.com/en-us/excel[...]
+Workbook 12, **Deep Decimals & Cancellation Audit**, demonstrates exact rational arithmetic. Workbook 10, **Exact Numbers & Numeric Boundaries**, adds long integers, tiny increments and extreme magnitudes. The table below distinguishes documented Excel limits from JavaScript results measured with Node.js. JavaScript numbers and Excel numeric cells both use binary floating-point arithmetic, but input handling, evaluation order and Excel’s corrective behavior can differ; the JavaScript outputs below are not measurements from Excel.
 
-The examples also show exact fractional linear solving and SI dimension tracking. Excel's [CONVERT](https://support.microsoft.com/en-us/excel/functions/convert-function) and [Goal Seek](https://s[...]
+Microsoft documents [15 significant digits of numeric precision](https://support.microsoft.com/en-us/excel/excel-specifications-and-limits) and [Excel floating-point behavior and range limits](https://learn.microsoft.com/en-GB/office/troubleshoot/excel/floating-point-arithmetic-inaccurate-result). This is a limit on significant digits, not decimal places: a small value such as 10^-72 does not automatically round to zero.
 
-Math.js already supports [Fractions](https://mathjs.org/docs/datatypes/fractions.html), [fractional unit values](https://mathjs.org/docs/datatypes/units.html), and [Complex and Matrix types](http[...]
+| Scenario / workbook cell | Formula or procedure | Verified JavaScript Float64 result / Excel distinction | AliceMath exact result |
+| --- | --- | --- | --- |
+| 100-place decimal, Workbook 12 D3 | B2 = `(1/5)^10`; D2 = `B2^5`; D3 = `D2*D2*(1/2)^5` | Same JavaScript operation sequence: `3.9614081257132386e-72`, an approximation. Excel cannot retain all significant digits of the exact coefficient. | Exact `1/(5^100 * 2^5)`, terminating after **100 decimal places**; full expansion below. |
+| Catastrophic cancellation, Workbook 12 D4 | `((1/3)*(10^8)^2-3333333333333333)*3` | JavaScript: `0`; the exact residual is lost during intermediate rounding. | `1` |
+| Four-step unstable affine recurrence, Workbook 12 D9 | Start at `1/3`; apply `x = 10000*x - 3333` four times in one expression | JavaScript: `0.030168432742357254` after four steps. This is an unstable affine map, not bounded chaos. | `1/3` at every step |
+| Prime harmonic remainder, Workbook 12 D10 | `solve x + 1/17 + 1/19 + 1/23 = 1` | JavaScript rearrangement: `0.8450666307713017`. Excel can use `=1-1/17-1/19-1/23` directly; Goal Seek or a macro is unnecessary. | `x = 6278/7429`; all shares sum to exactly `1` |
+| Prime gear identity, Workbook 12 D11 | `(17/97)*(97/53)*(53/89)*(89/17)` | JavaScript: `1` for this order. This example does **not** demonstrate a floating-point error; other expressions may round differently. | `1` by exact rational cancellation |
+| SI power to energy, Workbook 12 E12 | `convert ((3/7) kw)*(14 min) to kj` | JavaScript numeric equivalent `(3/7)*1000*14*60/1000` also gives `360`. Excel can compute the numeric result and has explicit unit conversion; ordinary numeric cells do not propagate SI dimensions. | `360 kj`; SI vector `[2, -2, 1]` |
+| Tiny increment, Workbook 10 D3 | `1 + 0.00000000000000000001` | JavaScript: `1`, losing the increment. | `1.00000000000000000001` |
+| Integer increment beyond 2^53 | `9007199254740992 + 1` | JavaScript: `9007199254740992`. Excel also has its documented 15-digit precision limit. | `9007199254740993` |
+| Huge integer and tiny reciprocal, Workbook 10 D6/D7 | `2^4000` and `1/2^4000`, expressed with nested allowed powers | JavaScript: `Infinity` and `0`; Excel reports overflow for the huge power and cannot retain the tiny positive value in a native numeric cell. | Exact 1205-digit integer and exact positive reciprocal, within the 4096-bit budget |
+| Dimensional guard, Workbook 12 D13 | `1 n + 1 w` | Adding ordinary numbers does not verify physical dimensions. | Rejected: incompatible force and power dimensions; a yellow cell comment explains why. |
+
+The decimal’s full expansion is:
+
+```text
+0.0000000000000000000000000000000000000000000000000000000000000000000000039614081257132168796771975168
+```
+
+It has 100 digits after the decimal point, including leading zeros, and 29 significant digits. The denominator reduces to `2^5 * 5^100`, so 100 is the required terminating decimal length. A genuinely 105-place variant can be constructed with `D3 / 5^5`; that is a different value.
+
+The measured recurrence values are `0.33333333333303017`, `0.3333333303016843`, `0.33330301684327424`, and `0.030168432742357254`. The proposed `0.25` and `-833` outputs do not match this four-step evaluation.
+
+The app’s Float Drift view simulates arithmetic inside each **resolved cell expression**. References supply exact upstream values converted to Float64, rather than carrying a separate rounded spreadsheet state. Use Workbook 12 D9’s nested expression to see rounding propagate through all four steps. SI formulas, solver syntax and large typed reference tokens may fall back to conversion of the exact result; this view is not a full Excel emulator.
+
+Excel offers [Goal Seek](https://support.microsoft.com/en-au/excel/use-goal-seek-to-find-the-result-you-want-by-adjusting-an-input-value), and simple linear equations can also be rearranged directly. AliceMath’s distinction here is automatic exact rational output with inline solving and SI tracking. These are comparisons with native numeric workflows; custom code, add-ins and other exact-arithmetic libraries can extend spreadsheets. They are not claims that these calculations are exclusive to AliceMath.
 
 Measurement inputs are assumed exact within each simplified model; exact arithmetic does not imply exact real-world measurements. Finance rows use one assumed currency as dimensionless amounts an[...]
 

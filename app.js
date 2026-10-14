@@ -77,7 +77,7 @@ const unitCountBadge = document.querySelector('#unit-count-badge');
 
 // Coordinate Helpers
 function parseCoord(coord) {
-  const m = /^([A-Z])(\d{1,2})$/i.exec(coord.trim());
+  const m = /^([A-Z])(\d+)$/i.exec(coord.trim());
   if (!m) return null;
   const colIdx = COLS.indexOf(m[1].toUpperCase());
   const rowIdx = Number(m[2]) - 1;
@@ -340,9 +340,9 @@ function evaluateCell(coord, visiting = new Set()) {
   }
 }
 
-// Expand SUM, AVG and PROD ranges, and single references throughout A1:Z26.
+// Expand ranges and single references; parseCoord validates against COLS and ROWS.
 function expandMacrosAndCellRefs(expr, visiting, context) {
-  let out = expr.replace(/\b(SUM|AVG|PROD)\s*\(\s*([A-Z]\d{1,2})\s*:\s*([A-Z]\d{1,2})\s*\)/gi, (_, fn, c1, c2) => {
+  let out = expr.replace(/\b(SUM|AVG|PROD)\s*\(\s*([A-Z]\d+)\s*:\s*([A-Z]\d+)\s*\)/gi, (_, fn, c1, c2) => {
     const coords = expandRange(c1, c2);
     if (!coords.length) throw new Error('Invalid cell range.');
     const tokens = coords.map(c => {
@@ -354,7 +354,7 @@ function expandMacrosAndCellRefs(expr, visiting, context) {
     return fn.toUpperCase() === 'AVG' ? `(${joined} /${coords.length})` : joined;
   });
 
-  out = out.replace(/\b([A-Z]\d{1,2})\b/gi, match => {
+  out = out.replace(/\b([A-Z]\d+)\b/gi, match => {
     const parsed = parseCoord(match);
     if (!parsed) throw new Error('Invalid cell coordinate: ' + match);
     const norm = parsed.coord;

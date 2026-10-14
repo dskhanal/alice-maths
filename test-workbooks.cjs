@@ -167,6 +167,24 @@ check('built-in example workbooks cannot be deleted',()=>{
   assert.throws(()=>vm.runInContext(`deleteCustomWorkbook('rocket')`,context),/no longer available/);
   assert.equal(vm.runInContext(`Object.hasOwn(WORKBOOK_TEMPLATES,'rocket')`,context),true);
 });
+for (const rowLimit of [600, 1200]) {
+  check('references and SUM/AVG/PROD scale to ROWS=' + rowLimit,()=>{
+    const scaled = vm.createContext({ AliceMath, document: { querySelector: () => ({ classList: { toggle() {} } }) } });
+    vm.runInContext(fs.readFileSync(path.join(root,'workbooks.js'),'utf8'),scaled);
+    vm.runInContext(controller.replace('const ROWS = 26;', 'const ROWS = ' + rowLimit + ';'),scaled);
+    const output = vm.runInContext(`
+      rawCells=new Map([['B499','=2'],['B500','=3'],['B501','=4'],['Z${rowLimit}','=7'],['A1','=B500+Z${rowLimit}'],['A2','=SUM(B499:B501)'],['A3','=AVG(B501:B499)'],['A4','=PROD(B499:B501)'],['A5','=SUM(B${rowLimit}:Z${rowLimit})'],['A6','=B${rowLimit+1}'],['A7','=SUM(B500:B${rowLimit+1})'],['A8','=b00500']]);
+      for (const col of COLS.slice(1,-1)) rawCells.set(col+'${rowLimit}','=0');
+      evaluatedCells.clear();
+      [evaluateCell('A1').text,evaluateCell('A2').text,evaluateCell('A3').text,evaluateCell('A4').text,evaluateCell('A5').text,evaluateCell('A6').text,evaluateCell('A7').text,evaluateCell('A8').text,parseCoord('Z${rowLimit}').rowIdx,parseCoord('B0'),parseCoord('B${rowLimit+1}')];
+    `,scaled);
+    assert.deepEqual(Array.from(output.slice(0,5)),['10.0','9.0','3.0','24.0','7.0']);
+    assert.match(output[5],/Invalid cell coordinate/);
+    assert.match(output[6],/Invalid cell range/);
+    assert.equal(output[7],'3.0'); assert.equal(output[8],rowLimit-1);
+    assert.equal(output[9],null);assert.equal(output[10],null);
+  });
+}
 const failures=results.filter(r=>!r.pass);
 fs.writeFileSync(path.join(require('node:os').tmpdir(),'alice-maths-workbook-results.json'),JSON.stringify(results,null,2));
 console.log(JSON.stringify({ total:results.length,passed:results.length-failures.length,failures },null,2));

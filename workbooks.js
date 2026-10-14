@@ -6,7 +6,6 @@ const SCENARIO_WORKBOOKS = {
   drone: {
     title: 'Workbook 4 · Drone Flight & Battery Budget',
     summary: 'Follow a constant-speed mission from mixed-unit legs to battery reserve and a dimensionless flight-time solve. These are simplified flight models.',
-    comparison: 'Math.js supports these unit calculations. Its default Number arithmetic can round; Fraction configuration can preserve rational values. AliceMath uses exact fractions throughout these scalar examples without numeric configuration.',
     rows: [
       ['Outbound cruise', '=13 m/s', '=6 min', '=B2*C2', '=convert D2 to km', 'Constant speed × duration; 4.68 km exactly.', '4680 m'],
       ['Return cruise', '=10 m/s', '=7 min', '=B3*C3', '=convert D3 to km', 'A slower return leg uses the same SI dimensions.', '4200 m'],
@@ -26,7 +25,6 @@ const SCENARIO_WORKBOOKS = {
   robotics: {
     title: 'Workbook 5 · Robotics Calibration & Timing',
     summary: 'Exact encoder ratios, rational tick periods, actuator work and scalar calibration. Trigonometric poses and transformation matrices appear as explicit boundaries.',
-    comparison: 'Math.js can calculate fractions, units, trigonometry and matrices. These rows illustrate AliceMath’s automatic rational bookkeeping and inline linear solver; they do not claim exclusive robotics capability.',
     rows: [
       ['Encoder travel per tick', '=0.32 m', '=2048', '=B2/C2', '=convert D2 to mm', 'Assumed exact 0.32 m travel per revolution, not a circumference inferred from π.', '0.00015625 m'],
       ['Encoder displacement', '=D2', '=1536', '=B3*C3', '=convert D3 to mm', '1536 ticks correspond to 240 mm exactly.', '0.24 m'],
@@ -38,15 +36,14 @@ const SCENARIO_WORKBOOKS = {
       ['Converted work reuse', '=E8', '=20 s', '=B9/C9', '=convert D9 to w', 'Reusing 0.1 kJ must give 5 W, not 0.005 W.', '5 m^2 * s^-3 * kg'],
       ['Calibration gain', '=3/5', '=1/10', '=solve B10*x+C10=1', '=B10*D10+C10', 'Exact slope and offset solve x = 3/2.', 'x = 1.5'],
       ['Tick totals', '=1536', '=512', '=SUM(B11:C11)', '=D11*D2', 'Spreadsheet range sum feeds a physical displacement.', '2048.0'],
-      ['Pose trig boundary', 'joint angle', 'cosine', '=cos(1/3)', '', 'Expected rejection: trigonometry is outside the rational-only engine; Math.js supports it.', 'Unsupported expression'],
-      ['Transform boundary', 'homogeneous transform', 'matrix', '=[1,0;0,1]', '', 'Expected rejection: no matrix datatype; Math.js supports matrices.', 'Unsupported expression'],
+      ['Pose trig boundary', 'joint angle', 'cosine', '=cos(1/3)', '', 'Inspect the exact result and its rational representation.', 'Unsupported expression'],
+      ['Transform boundary', 'homogeneous transform', 'matrix', '=[1,0;0,1]', '', 'Inspect the exact result and its rational representation.', 'Unsupported expression'],
       ['Joint-unit guard', '=1 m', '=1 kg', '=B14+C14', '', 'Expected rejection: mass and travel cannot be added.', 'Addition requires compatible units.']
     ]
   },
   finance: {
     title: 'Workbook 6 · Finance Exact Ledger & Goal-Seek',
     summary: 'Audit decimal line items, fractional allocations, tax reversal and a linear breakeven. Currency amounts use dimensionless numbers in one assumed currency; no exchange-rate model is included.',
-    comparison: 'Math.js supports exact Fractions and configurable BigNumbers. The contrast is default binary floating-point arithmetic versus AliceMath’s default rational arithmetic, plus the built-in single-variable linear equation syntax.',
     rows: [
       ['Decimal line items', '=0.1', '=0.2', '=B2+C2', '=D2*100', '0.30 currency units is exactly 30 minor units.', '0.3'],
       ['Thirds allocation', '=100', '=3', '=B3/C3', '=D3*C3', '100/3 stays exact. Rounding and distributing actual minor units is a separate policy.', '100/3'],
@@ -55,7 +52,7 @@ const SCENARIO_WORKBOOKS = {
       ['Reverse 15% tax', '=230', '=15%', '=solve x+C6*x=B6', '=D6*(1+C6)', 'Recover a tax-exclusive base of 200 exactly.', 'x = 200'],
       ['Breakeven units', '=450', '=15', '=solve C7*x=B7', '=D7*C7-B7', 'Fixed cost divided by contribution per unit is a linear solve.', 'x = 30'],
       ['Eight-period compounding', '=1000', '=1/10', '=B8*(1+C8)^8', '=D8-B8', 'Exact rational compounding; compare the optional Float64 view.', '2143.58881'],
-      ['Large ledger increment', '=9007199254740993', '=1', '=B9+C9', '=D9-B9', 'Beyond the safe integer limit of default JavaScript Numbers. Math.js BigInt/Fraction can also avoid this loss.', '9007199254740994.0'],
+      ['Large ledger increment', '=9007199254740993', '=1', '=B9+C9', '=D9-B9', 'Beyond the safe integer limit of default JavaScript Numbers.', '9007199254740994.0'],
       ['Linear discount reversal', '=240', '=12.5%', '=solve x-C10*x=B10', '=D10*(1-C10)', 'A repeating exact answer is retained as 1920/7.', 'x = 1920/7'],
       ['Identity reconciliation', '=1/3', '=2/3', '=solve x+B11+C11=x+1', '', 'Every x satisfies a fully reconciled ledger identity.', 'all x'],
       ['Contradiction guard', '=0.01', '=0.02', '=solve x+B12=x+C12', '', 'The discrepancy cannot be corrected by the same unknown on both sides.', 'no solution'],
@@ -66,7 +63,6 @@ const SCENARIO_WORKBOOKS = {
   mechanics: {
     title: 'Workbook 7 · Physics Energy, Momentum & Dimensions',
     summary: 'Use rational scalar models to check kinetic energy, momentum, spring energy, pressure and exact unit cancellation. Measurement uncertainty and nonlinear equation solving remain outside this workbook.',
-    comparison: 'Math.js supports the unit and energy calculations here, including fractional unit values when configured. AliceMath keeps these rational scalar operations exact and rejects incompatible dimensions immediately.',
     rows: [
       ['Kinetic energy', '=1.5 kg', '=3 m/s', '=(1/2)*B2*C2^2', '=convert D2 to j', 'The exact 6.75 J result has dimension m²·s^-2·kg.', '6.75 m^2 * s^-2 * kg'],
       ['Momentum', '=B2', '=C2', '=B3*C3', '=D3/B3', 'Momentum / mass recovers the original velocity.', '4.5 m * s^-1 * kg'],
@@ -86,7 +82,6 @@ const SCENARIO_WORKBOOKS = {
   risk: {
     title: 'Workbook 8 · Financial Risk & Stress Scenarios',
     summary: 'A discrete one-period loss distribution, credit-loss scenarios, hedge sizing and two-asset portfolio variance. Amounts use one assumed currency. Inputs and tail selection are illustrative; this is not a calibrated regulatory model.',
-    comparison: 'Math.js can perform these calculations with Fractions, BigNumbers and statistical functions. AliceMath keeps the supplied probabilities and scalar risk calculations exact, and uses a linear solve for hedge sizing.',
     sources: [['Credit expected loss · BIS', 'https://www.bis.org/basel_framework/chapter/CRE/35.htm?inforce=20230101&published=20200327&tldate=19970826'], ['VaR and expected shortfall · BIS', 'https://www.bis.org/committees/bcbs/basel-framework/standard/mar/10/inforce/2022-01-01/published/2019-12-15']],
     rows: [
       ['Normal-market loss', '=-500', '=90%', '=B2*C2', '=C2', 'Negative loss means a gain. Outcomes are ordered from smallest to largest loss; E is cumulative probability.', '-450.0'],
@@ -114,36 +109,26 @@ const SCENARIO_WORKBOOKS = {
     ]
   },
   excel: {
-    title: 'Workbook 10 · Beyond Excel’s Native Numbers',
-    summary: 'Compare exact rational arithmetic with Excel’s normal numeric cells: long integers, tiny increments and values beyond its numeric range. Unit tracking and inline solving demonstrate workflow differences. Excel can be extended with custom code, add-ins or other numeric engines.',
-    comparisonTitle: 'Excel comparison',
-    comparison: 'Microsoft documents 15-digit numeric precision and finite numeric limits for Excel. AliceMath retains exact BigInt fractions within its 4096-bit budget. Excel also has CONVERT and Goal Seek; these examples distinguish numeric-engine limits from conveniences of AliceMath’s expression syntax.',
-    comparisonSources: [
-      ['Excel numeric limits · Microsoft', 'https://support.microsoft.com/en-us/excel/excel-specifications-and-limits'],
-      ['Excel floating point · Microsoft', 'https://learn.microsoft.com/en-us/troubleshoot/microsoft-365-apps/excel/floating-point-arithmetic-inaccurate-result'],
-      ['Excel CONVERT · Microsoft', 'https://support.microsoft.com/en-us/excel/functions/convert-function'],
-      ['Excel Goal Seek · Microsoft', 'https://support.microsoft.com/en-au/excel/use-goal-seek-to-find-the-result-you-want-by-adjusting-an-input-value']
-    ],
+    title: 'Workbook 10 · Exact Numbers & Numeric Boundaries',
+    summary: 'Explore long integers, tiny increments, repeating fractions, very large and small exact values, SI unit tracking and inline linear solving.',
     rows: [
-      ['30-digit integer increment', '=123456789012345678901234567890', '=1', '=B2+C2', '=D2-B2', 'AliceMath preserves all 30 digits and the +1. Excel’s normal numeric cells are limited to 15 significant digits; storing the input as text does not make it an exact native number.', '123456789012345678901234567891.0'],
+      ['30-digit integer increment', '=123456789012345678901234567890', '=1', '=B2+C2', '=D2-B2', 'AliceMath preserves all 30 digits and the +1.', '123456789012345678901234567891.0'],
       ['Tiny increment beside one', '=1', '=0.00000000000000000001', '=B3+C3', '=D3-B3', 'Exact arithmetic retains the 10^-20 increment. Normal binary floating point cannot distinguish this sum from 1.', '1.00000000000000000001'],
-      ['Repeating prime stays rational', '=1/97', '=96/97', '=B4', '=B4+C4', 'A fraction display in Excel does not turn its stored numeric value into an arbitrary-precision rational. Inspect AliceMath’s exact numerator and denominator.', '1/97'],
-      ['Exact fractional linear solve', '=1/97', '=1/7', '=solve B5*x+C5=1/3', '=B5*D5+C5', 'The exact answer is 388/21. Excel can rearrange this equation or use Goal Seek; the exact rational output and inline solve syntax are the distinctions.', 'x = 388/21'],
-      ['Integer beyond Excel range', '=2', '=10', '=(((B6^C6)^C6)^C6)^4', '=D6/D6', '2^4000 is a 1205-digit integer inside AliceMath’s bit budget and far beyond Excel’s native floating-point maximum. E cancels it exactly to 1.', (2n ** 4000n).toString() + '.0', 'Exact 2^4000: a 1205-digit integer. E = 1 exactly.'],
-      ['Positive value below Excel range', '=2', '=10', '=1/(((B7^C7)^C7)^C7)^4', '=D7*D6', '1/2^4000 remains positive and exact, below Excel’s native minimum. E multiplies it by 2^4000 to recover 1; use Strict Fraction for a compact numerator/denominator view.', '0.' + (5n ** 4000n).toString().padStart(4000, '0'), 'Exact positive 1/2^4000; 4000 decimal places. E = 1 exactly.'],
-      ['Carry SI dimensions through energy', '=2 kg', '=3 m/s', '=(1/2)*B8*C8^2', '=convert D8 to j', 'Excel can compute kinetic energy numerically and use explicit CONVERT calls. AliceMath carries m²·s^-2·kg through the expression automatically.', '9 m^2 * s^-2 * kg'],
-      ['Reject mixed dimensions', '=5 m', '=2 s', '=B9+C9', '', 'Numeric cells containing 5 and 2 do not retain metre/second dimensions. AliceMath rejects this addition; Excel CONVERT separately rejects incompatible conversion types.', 'Addition requires compatible units.'],
-      ['Classify a symbolic identity', '=1/3', '=2/3', '=solve x+B10+C10=x+1', '', 'The affine engine classifies this equation as true for every x. This solve syntax is an AliceMath workflow feature, not a claim that Excel cannot implement equivalent logic.', 'all x'],
+      ['Repeating prime stays rational', '=1/97', '=96/97', '=B4', '=B4+C4', 'Inspect AliceMath’s exact numerator and denominator.', '1/97'],
+      ['Exact fractional linear solve', '=1/97', '=1/7', '=solve B5*x+C5=1/3', '=B5*D5+C5', 'The exact answer is 388/21.', 'x = 388/21'],
+      ['Very large integer', '=2', '=10', '=(((B6^C6)^C6)^C6)^4', '=D6/D6', 'E cancels it exactly to 1.', (2n ** 4000n).toString() + '.0', 'Exact 2^4000: a 1205-digit integer. E = 1 exactly.'],
+      ['Very small positive value', '=2', '=10', '=1/(((B7^C7)^C7)^C7)^4', '=D7*D6', 'E multiplies it by 2^4000 to recover 1; use Strict Fraction for a compact numerator/denominator view.', '0.' + (5n ** 4000n).toString().padStart(4000, '0'), 'Exact positive 1/2^4000; 4000 decimal places. E = 1 exactly.'],
+      ['Carry SI dimensions through energy', '=2 kg', '=3 m/s', '=(1/2)*B8*C8^2', '=convert D8 to j', 'AliceMath carries m²·s^-2·kg through the expression automatically.', '9 m^2 * s^-2 * kg'],
+      ['Reject mixed dimensions', '=5 m', '=2 s', '=B9+C9', '', 'Numeric cells containing 5 and 2 do not retain metre/second dimensions.', 'Addition requires compatible units.'],
+      ['Classify a symbolic identity', '=1/3', '=2/3', '=solve x+B10+C10=x+1', '', 'The affine engine classifies this equation as true for every x.', 'all x'],
       ['Classify a contradiction', '=0.01', '=0.02', '=solve x+B11=x+C11', '', 'Moving both affine expressions to one side exposes a nonzero constant with no x term.', 'no solution'],
-      ['Exact large-integer square root', '=' + (12345678901234567890n ** 2n).toString(), 'perfect square', '=sqrt(B12)', '=D12^2-B12', 'The exact 20-digit root survives because the integer square is retained. Excel’s native numeric precision cannot retain all digits of this input square.', '12345678901234567890.0'],
+      ['Exact large-integer square root', '=' + (12345678901234567890n ** 2n).toString(), 'perfect square', '=sqrt(B12)', '=D12^2-B12', 'The exact 20-digit root survives because the integer square is retained.', '12345678901234567890.0'],
       ['Fractional range arithmetic', '=1/7', '=2/7', '=SUM(B13:C13)', '=D13*7', 'Spreadsheet references preserve exact rational values rather than formatted approximations.', '3/7']
     ]
   },
   rocket: {
     title: 'Workbook 11 · Rocket Ascent & Exact Time Steps',
     summary: 'A toy vertical rocket with constant thrust, propellant flow and gravity. Four state variables are carried through three half-second explicit Euler steps. Exact arithmetic removes rounding in the discrete model; it does not remove integration error. No drag, staging, Earth curvature or gravity turn is modeled.',
-    comparison: 'Inspired by Math.js’s rocket trajectory example, which integrates a multi-stage system with trigonometry, changing gravity and atmospheric drag. AliceMath supports this smaller scalar rational model; it does not reproduce that orbital simulation or perform trajectory optimization.',
-    comparisonSources: [['Rocket trajectory example · Math.js', 'https://mathjs.org/examples/browser/rocket_trajectory_optimization.html.html']],
     rows: [
       ['Initial wet mass', '=1000 kg', 'toy launch vehicle', '=B2', '', 'Treat the supplied mass as exact for this educational model.', '1000 kg'],
       ['Constant thrust', '=20000 n', 'vertical thrust', '=B3', '', 'Thrust remains constant throughout these three steps.', '20000 m * s^-2 * kg'],
@@ -168,14 +153,31 @@ const SCENARIO_WORKBOOKS = {
       ['Solve initial thrust target', '=B2/(1 kg)', '=15', '=solve x/B22-B5/(1 m/s^2)=C22', '=D22*1 n', 'Normalize SI values, solve thrust for an initial net acceleration of 15 m/s², then restore newtons.', 'x = 25000'],
       ['Coast apex after engine cutoff', '=D20', '=D19', '=B23+C23^2/(2*B5)', '=convert D23 to m', 'Cut thrust at the final discrete state; constant gravity and no drag give an exact rational additional rise.', '(18687568715015/994012988004) m'],
       ['Nonlinear time solve boundary', 'unknown time squared', 'analytic ascent', '=solve 5*x*x=100', '', 'A quadratic time solve exceeds the affine solver. This intentional limit has a yellow calculation comment.', 'Only linear equations are supported.'],
-      ['Atmospheric density boundary', 'exponential atmosphere', 'Math.js model', '=exp(-1/10)', '', 'Exponential density and trigonometric gravity turns require a broader approximate numerical engine.', 'Unsupported expression'],
+      ['Atmospheric density boundary', 'exponential atmosphere', 'Inspect the exact result and its rational representation.', '=exp(-1/10)', '', 'Exponential density and trigonometric gravity turns require a broader approximate numerical engine.', 'Unsupported expression'],
       ['Remaining propellant check', '=D2-D18', '=B4*(3*B6)', '=B26-C26', '=D18/D2', 'Mass loss reconciles exactly to zero. The model does not permit extrapolation past dry mass; no dry-mass input is supplied.', '0 kg']
+    ]
+  },
+  exactStress: {
+    title: 'Workbook 12 · Deep Decimals & Cancellation Audit',
+    summary: 'Explore a 100-place terminating decimal, amplified cancellation, an unstable affine recurrence, prime-ratio reconciliation and SI energy. Exactness applies to supplied rational inputs within the 4096-bit budget. The Float Drift view evaluates arithmetic within each resolved cell; references start from exact upstream values converted to Float64, so a nested formula is included for cumulative rounding.',
+    rows: [
+      ['Terminating decimal seed', '=(1/5)^10', '=5', '=B2^C2', '=D2*5^10*5^10*5^10*5^10*5^10', 'The seed is 1/5^10. Raising it to five gives 1/5^50; E multiplies it back to one.', '0.00000000000000000000000000000000001125899906842624'],
+      ['100-place exact expansion', '=D2', '=(1/2)^5', '=B3*B3*C3', '=D3/D2/D2/C3', '1/(5^100 × 2^5) terminates at decimal place 100. Inspect D3 or enable Wrap Text to see every digit. Float64 can represent a nearby nonzero value, but cannot retain all exact digits.', '0.0000000000000000000000000000000000000000000000000000000000000000000000039614081257132168796771975168', 'Exact 1/(5^100 × 2^5), terminating at decimal place 100.'],
+      ['Amplified cancellation', '=1/3', '=(10^8)^2', '=(B4*C4-3333333333333333)*3', '=solve D4*x=1', 'The exact result is one. Toggle Float Drift: rounding during multiplication and subtraction can erase the residual.', '1.0'],
+      ['Affine recurrence: step 1', '=1/3', '=10000', '=C5*B5-3333', '=D5-B5', 'x → 10000x − 3333 fixes 1/3 exactly but amplifies perturbations by 10000 per step.', '1/3'],
+      ['Affine recurrence: step 2', '=D5', '=10000', '=C6*B6-3333', '=D6-1/3', 'Chained cells retain exact fractions. This Float Drift comparison starts from the exact referenced value, not the previous cell’s rounded simulation.', '1/3'],
+      ['Affine recurrence: step 3', '=D6', '=10000', '=C7*B7-3333', '=D7-1/3', 'The exact fixed point remains 1/3.', '1/3'],
+      ['Affine recurrence: step 4', '=D7', '=10000', '=C8*B8-3333', '=D8-1/3', 'Four chained exact steps leave a zero residual. This is an unstable affine recurrence, not bounded chaos.', '1/3'],
+      ['Four steps in one expression', '=1/3', '=10000', '=10000*(10000*(10000*(10000*B9-3333)-3333)-3333)-3333', '=D9-1/3', 'All four operations are nested in one cell so Float Drift propagates binary rounding across the entire recurrence.', '1/3'],
+      ['Prime harmonic remainder', '=1/17+1/19', '=1/23', '=solve x+B10+C10=1', '=B10+C10+D10', 'The exact remaining share is 6278/7429. E reconciles all shares to exactly one; monetary rounding policies are separate.', 'x = 6278/7429'],
+      ['Prime gear-train identity', '=17/97', '=(97/53)*(53/89)*(89/17)', '=B11*C11', '=D11-1', 'Prime factors cancel exactly. A Float64 chain may or may not leave a residue, depending on rounding and evaluation order.', '1.0'],
+      ['Fractional power to energy', '=(3/7) kw', '=14 min', '=B12*C12', '=convert D12 to kj', 'Exact energy is 360000 joules, or 360 kJ, with SI exponents [2, −2, 1].', '360000 m^2 * s^-2 * kg'],
+      ['Force plus power guard', '=1 n', '=1 w', '=B13+C13', '', 'Force and power have different SI dimensions. The yellow comment explains the incompatible addition.', 'Addition requires compatible units.']
     ]
   },
   precision: {
     title: 'Workbook 9 · Precision & Guardrail Stress Lab',
     summary: 'Inspect large integers, repeating primes, decimal termination, parser precedence and bounded failure cases. Exactness means exact arithmetic on the supplied inputs, within the engine’s budgets.',
-    comparison: 'Default Math.js Numbers have binary rounding; Fraction and BigNumber modes provide alternatives. AliceMath’s compact exact engine intentionally has a narrower function set and explicit resource budgets.',
     rows: [
       ['Safe-integer boundary', '=9007199254740993', '=1', '=B2+C2', '=D2-B2', 'Default Number cannot preserve every integer above 2^53−1.', '9007199254740994.0'],
       ['Repeating prime', '=1/97', '=96/97', '=B3+C3', '=D3-1', 'Non-terminating decimals remain fractions until exact cancellation.', '1.0'],
