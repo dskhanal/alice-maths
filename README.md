@@ -5,9 +5,8 @@ An exact rational, dimensionally-typed spreadsheet and natural-language omnibox 
 Unlike standard JavaScript calculators and spreadsheets that rely on 64-bit IEEE-754 floating-point numbers (where `0.1 + 0.2 === 0.30000000000000004`) or separate libraries for fractions, physical units, and computer algebra, `AliceMath` unifies **arbitrary-precision `BigInt` rationals**, **SI dimensional analysis (`[m, s, kg]`)**, and **single-variable linear equation solving (`solve for x`)** inside a zero-dependency ~2.5 KB engine with **zero `eval()`**.
 
 ---
-# Demo: AliceGrid &amp; Omnibox · Exact Rational &amp; Dimensional Spreadsheet
+# Demo Spreadsheet Calculator
 
----
 
 ## What is Different in AliceMath’s Architecture
 
