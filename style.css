@@ -519,3 +519,9 @@ button.danger { background: var(--err); color: #fff; border-color: var(--err); }
 .omnibox-shell .omni-icon { flex-shrink: 0; }
 .omnibox-shell .btn-sm { flex: 0 0 auto; height: 32px; white-space: nowrap; }
 .omnibox-shell .omni-preview { flex: 0 1 25%; min-width: 0; height: 32px; line-height: 22px; }
+
+.statusbar { flex-wrap: wrap; }
+.footer-share { color: var(--purple-dark); font-weight: 600; white-space: nowrap; }
+
+.footer-github { display: inline-flex; align-items: center; gap: 6px; }
+.footer-github svg { flex-shrink: 0; }

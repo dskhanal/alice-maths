@@ -766,8 +766,6 @@ function updateWorkbookGuide(coord) {
   const workbook = SCENARIO_WORKBOOKS[selectedTemplate];
   const custom = customWorkbooks.get(selectedTemplate);
   document.querySelector('#workbook-guide').hidden = !workbook && !custom;
-  document.querySelector('#workbook-comparison-title').hidden = !!custom;
-  document.querySelector('#workbook-comparison').hidden = !!custom;
   document.querySelector('#workbook-sources').hidden = !!custom;
   if (custom) {
     document.querySelector('#workbook-title').textContent = custom.name;
@@ -779,14 +777,12 @@ function updateWorkbookGuide(coord) {
   if (!workbook) return;
   document.querySelector('#workbook-title').textContent = workbook.title.replace(/^Workbook \d+ · /, '');
   document.querySelector('#workbook-summary').textContent = workbook.summary;
-  document.querySelector('#workbook-comparison').textContent = workbook.comparison;
   const row = workbook.rows[(parseCoord(coord)?.rowIdx ?? 0) - 1];
   document.querySelector('#workbook-example').textContent = row ? row[0] + ': ' + row[5] : 'Select a result or guard cell to inspect its formula and exact rational output.';
   document.querySelector('#workbook-expected').textContent = row ? 'Template result (Exact Auto): ' + (row[7] || row[6]) : '';
-  document.querySelector('#workbook-comparison-title').textContent = workbook.comparisonTitle || 'Math.js comparison';
   const links = document.querySelector('#workbook-sources');
   links.replaceChildren();
-  const sources = [...(workbook.comparisonSources || [['Math.js fractions', 'https://mathjs.org/docs/datatypes/fractions.html'], ['Math.js units', 'https://mathjs.org/docs/datatypes/units.html'], ['Math.js datatypes', 'https://mathjs.org/docs/datatypes/index.html']]), ...(workbook.sources || [])];
+  const sources = workbook.sources || [];
   for (const [label, href] of sources) {
     const a = document.createElement('a');
     a.textContent = label;
