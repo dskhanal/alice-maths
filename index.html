@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AliceGrid &amp; Omnibox · Exact Rational &amp; Dimensional Spreadsheet</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-wrap">
+      <div class="brand">
+        <span class="mark">a</span> alice<span class="dot">.</span>
+      </div>
+      <div class="brand-copy">
+        <span class="sub">Grid &amp; Omnibox</span>
+        <span class="badge good">BigInt Q · [m, s, kg] · Linear x · Zero eval</span>
+      </div>
+    </div>
+
+    <!-- Global Natural-Language Omnibox -->
+    <div class="omnibox-shell" role="search">
+      <span class="omni-icon" aria-hidden="true">⌘K</span>
+      <input
+        id="omnibox-input"
+        type="text"
+        autocomplete="off"
+        placeholder="Ask Omnibox: solve 2*x + A1 = 25, convert 1500 m to km, 15% of B2, or 1/97…"
+        aria-label="Smart Math & Unit Omnibox"
+      >
+      <div id="omnibox-preview" class="omni-preview">Type an expression…</div>
+      <button id="omnibox-send-cell" class="btn-sm primary" title="Write expression into selected spreadsheet cell">→ Active Cell</button>
+      <button id="omnibox-pin" class="btn-sm" title="Save to Omnibox History Tape">+ Tape</button>
+    </div>
+
+    <div class="top-actions">
+      <select id="template-select" aria-label="Select Workbook">
+        <option value="audit">Workbook 1 · IEEE-754 Float vs. Exact Rational Audit</option>
+        <option value="physics">Workbook 2 · SI Dimensional Kinematics &amp; Robotics [m, s, kg]</option>
+        <option value="algebra">Workbook 3 · Linear Goal-Seek &amp; Breakeven Solver (solve for x)</option>
+      </select>
+      <button id="new-workbook" class="btn-sm primary">New Workbook</button>
+      <button id="delete-workbook" class="btn-sm" hidden>Delete Workbook</button>
+      <button id="export-csv" class="btn-sm">Export CSV</button>
+      <button id="export-json" class="btn-sm">Export JSON</button>
+      <div class="clear-grid-tools">
+        <button id="clear-sheet" class="btn-sm">Clear Grid</button>
+        <div class="grid-display-tools" role="group" aria-label="Cell text layout">
+          <button id="wrap-cell-text" class="chip" aria-pressed="false" title="Wrap cell content within the current column width">Wrap Text</button>
+          <button id="fit-cell-columns" class="chip" aria-pressed="false" title="Automatically fit column widths to their current content">Fit Columns</button>
+        </div>
+      </div>
+      <span id="workbook-storage-status" class="workbook-storage-status" role="status"></span>
+    </div>
+  </header>
+
+  <!-- Formula & Cell Bar -->
+  <section class="formula-bar" aria-label="Spreadsheet Formula Bar">
+    <div id="active-cell-badge" class="cell-coord">A1</div>
+    <span class="fx-label">fx</span>
+    <input
+      id="formula-input"
+      type="text"
+      autocomplete="off"
+      placeholder="Enter number, fraction (1/3), unit expression (3 m + 40 cm), cell formula (=A1 + B1, =SUM(A1:A5)), or equation (solve 2*x + A1 = 10)"
+      aria-label="Cell Formula Input"
+    >
+    <div class="display-mode-group" role="group" aria-label="Number Display Format">
+      <button class="chip active" data-format="auto">Exact Auto</button>
+      <button class="chip" data-format="fraction">Strict Fraction (n/d)</button>
+      <button class="chip" data-format="float">IEEE-754 Float Drift Diff</button>
+    </div>
+  </section>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+    <!-- Spreadsheet Grid Canvas -->
+    <section class="grid-panel" aria-label="Exact Rational Spreadsheet">
+      <div class="table-scroll">
+        <table id="sheet-grid" class="sheet-table"></table>
+      </div>
+    </section>
+
+    <!-- Right Inspector & Omnibox Tape Sidebar -->
+    <aside class="inspector-panel">
+      <!-- Active Cell Epistemic & Rational Inspector -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Active Cell Inspector</h2>
+          <span id="inspector-status" class="badge">Ready</span>
+        </div>
+        <div id="inspector-body" class="inspector-body">
+          <div class="kv-row"><span>Cell Coordinate</span><strong id="insp-coord">A1</strong></div>
+          <div class="kv-row"><span>Raw Formula</span><code id="insp-raw">—</code></div>
+          <div class="kv-row"><span>Resolved Expression</span><code id="insp-resolved">—</code></div>
+          <div class="kv-row"><span>Exact Output</span><strong id="insp-output" class="mono-val">—</strong></div>
+          <div class="kv-row"><span>Rational Fraction (n / d)</span><code id="insp-fraction">—</code></div>
+          <div class="kv-row"><span>BigInt Bit-Length</span><code id="insp-bits">—</code></div>
+          <div class="kv-row"><span>SI Dimensions [m, s, kg]</span><code id="insp-dim">[0, 0, 0] (dimensionless)</code></div>
+          <div class="kv-row"><span>IEEE-754 Float64 Value</span><code id="insp-float">—</code></div>
+        </div>
+      </div>
+
+      <div class="card workbook-guide" id="workbook-guide" hidden>
+        <div class="card-header"><h2 id="workbook-title">Workbook guide</h2></div>
+        <p id="workbook-summary"></p>
+        <div class="workbook-example">
+          <p id="workbook-example"></p>
+          <p id="workbook-expected"></p>
+        </div>
+        <h3 id="workbook-comparison-title">Math.js comparison</h3>
+        <p id="workbook-comparison"></p>
+        <nav id="workbook-sources" aria-label="Workbook sources"></nav>
+      </div>
+
+      <!-- Omnibox Interactive Tape & Quick Prompts -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Omnibox Live Tape</h2>
+          <button id="clear-tape" class="btn-xs">Clear</button>
+        </div>
+        <div class="quick-chips" id="omni-quick-chips"></div>
+        <div id="omnibox-tape" class="tape-list"></div>
+      </div>
+
+      <!-- Custom SI Unit Registry -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Declared SI Unit Registry</h2>
+          <span class="badge" id="unit-count-badge">0 units</span>
+        </div>
+        <p class="hint">Add custom units mapped to exact rational multipliers and <code>[m, s, kg]</code> exponents.</p>
+        <div class="unit-add-row">
+          <input id="new-unit-name" type="text" placeholder="name (e.g. au)" maxlength="20">
+          <input id="new-unit-scale" type="text" placeholder="scale (e.g. 149597870700)">
+          <input id="new-unit-dim" type="text" placeholder="m,s,kg (e.g. 1,0,0)" value="1,0,0">
+          <button id="add-unit-btn" class="btn-sm primary">Add</button>
+        </div>
+        <div id="unit-list" class="unit-list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <section id="cell-comment" class="cell-comment" role="dialog" aria-label="Cell calculation comment" hidden>
+    <div class="cell-comment-heading">
+      <strong id="cell-comment-title"></strong>
+      <button id="close-cell-comment" class="btn-xs" aria-label="Close cell comment">×</button>
+    </div>
+    <p id="cell-comment-reason"></p>
+    <span class="comment-field-label">Resolved Expression</span>
+    <code id="cell-comment-expression"></code>
+    <span class="comment-field-label">Raw Formula</span>
+    <code id="cell-comment-raw"></code>
+  </section>
+
+  <dialog id="new-workbook-dialog" class="new-workbook-dialog" aria-labelledby="new-workbook-title">
+    <form id="new-workbook-form">
+      <h2 id="new-workbook-title">New Workbook</h2>
+      <label for="new-workbook-name">Workbook name</label>
+      <input id="new-workbook-name" type="text" maxlength="80" required autocomplete="off">
+      <p id="new-workbook-hint" class="hint">Start with a blank grid. Your workbooks are saved in this browser.</p>
+      <p id="new-workbook-error" class="new-workbook-error" role="alert" hidden></p>
+      <div class="new-workbook-actions">
+        <button id="cancel-new-workbook" type="button">Cancel</button>
+        <button type="submit" class="primary">Create Workbook</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="delete-workbook-dialog" class="new-workbook-dialog" aria-labelledby="delete-workbook-title">
+    <form id="delete-workbook-form">
+      <h2 id="delete-workbook-title">Delete Workbook</h2>
+      <p>Delete <strong id="delete-workbook-name"></strong> and all its cells from this browser?</p>
+      <p class="hint">This cannot be undone. Export JSON first if you want a backup.</p>
+      <p id="delete-workbook-error" class="new-workbook-error" role="alert" hidden></p>
+      <div class="new-workbook-actions">
+        <button id="cancel-delete-workbook" type="button">Cancel</button>
+        <button type="submit" class="danger">Delete Workbook</button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer class="statusbar">
+    <div>
+      <strong>Engine:</strong> <code>AliceMath</code> (<code>Q</code>, <code>V</code>, <code>Parser</code>) · Arbitrary-Precision Rational &amp; Dimensional Algebra
+    </div>
+    <div>
+      <strong>Attribution:</strong> Based on <em>Alice by San</em> · Non-Commercial Attribution License (CC BY-NC 4.0)
+    </div>
+  </footer>
+
+  <script src="alice-math.min.js"></script>
+  <script src="workbooks.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
