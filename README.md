@@ -157,7 +157,3 @@ Run `node test-workbooks.cjs` from the application directory to verify the scena
 ## License & Required Attribution (Non-Commercial)
 
 ### Alice by San — Non-Commercial Attribution License (CC BY-NC 4.0)
-
-Copyright © 2026 **Alice by San** (Sanjaya Khanal). All rights reserved under the terms below.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software, mathematical engine (`AliceMath`), and associated documentation files (the "Software"), to **use, co[...]
