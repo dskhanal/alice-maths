@@ -85,7 +85,7 @@ Natural math expressions mix explicit operators (`2 * x + 3`) with implicit juxt
 
 ## Scenario Workbooks
 
-The selector includes nine additional educational workbooks (12 built-in workbooks in total), defined in `workbooks.js`:
+The selector includes ten additional educational workbooks (13 built-in workbooks in total), defined in `workbooks.js`:
 
 | Workbook | Exact examples | Deliberate boundaries |
 | --- | --- | --- |
@@ -98,6 +98,8 @@ The selector includes nine additional educational workbooks (12 built-in workboo
 | Exact Numbers & Numeric Boundaries | 30-digit integer arithmetic, tiny increments, exact repeating fractions, values above/below Excel’s native range, exact large square roots and SI tracking | A[...]
 | Rocket Ascent & Exact Time Steps | Changing-mass Euler steps, thrust solving and a coast apex | Integration error, nonlinear solving and exponential atmosphere |
 | Deep Decimals & Cancellation Audit | 100-place decimal, cancellation, unstable affine recurrence, prime ratios and SI energy | Float64 drift and incompatible dimensions |
+
+| Linear Regression & Logistic Odds | Exact OLS slope/intercept, residuals, SSE, R², prediction and rational logistic odds | Logarithms, exponentials and iterative logistic fitting |
 
 Select a row to read its explanation and expected Exact Auto output in the workbook guide. Amber boundary cells are intentional rejections. Unsupported, undefined and failed calculations display t[...]
 
@@ -114,6 +116,12 @@ To remove a saved workbook, select it under **My workbooks**, click **Delete Wor
 ### Rocket ascent example
 
 Workbook 11 is inspired by the [Math.js rocket trajectory example](https://mathjs.org/examples/browser/rocket_trajectory_optimization.html.html). It follows three half-second explicit Euler steps[...]
+
+### Linear regression and logistic odds
+
+Workbook 13 fits a four-observation ordinary least-squares line using exact rational sufficient statistics. It calculates slope 0.8, intercept 1.5, residual sum of squares 1.8 and R² = 0.64, then predicts and solves backwards through the fitted line. Edit B2:C5 to refit the data. The sample count is fixed at four. Identical predictor values make the slope undefined; constant responses make R² undefined.
+
+The logistic section uses **supplied** baseline probability 1/5 and odds ratio 3/2, calculating `p(x) = O₀ OR^x / (1 + O₀ OR^x)` for integer predictor steps. Probabilities are exact fractions (for example, 3/11 at x = 1). Valid baseline probabilities must lie strictly between zero and one, and odds ratios must be positive; these are input assumptions, not automatic statistical validation. Integer exponents remain limited to −10…10. This does not fit logistic regression coefficients: logarithms, exponentials, iterative maximum likelihood, standard errors and confidence intervals are outside the current engine. Boundary cells explain those limits.
 
 ### Verified exact arithmetic and Float64 comparisons
 

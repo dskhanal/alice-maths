@@ -175,6 +175,37 @@ const SCENARIO_WORKBOOKS = {
       ['Force plus power guard', '=1 n', '=1 w', '=B13+C13', '', 'Force and power have different SI dimensions. The yellow comment explains the incompatible addition.', 'Addition requires compatible units.']
     ]
   },
+  regression: {
+    title: 'Workbook 13 · Linear Regression & Logistic Odds',
+    summary: 'Fit y = intercept + slope × x by ordinary least squares using four exact rational observations. Then calculate logistic-model probabilities from supplied baseline odds and an odds ratio. The logistic section does not estimate coefficients: logit-space fitting, standard errors and iterative maximum likelihood require functions outside this engine. All examples use dimensionless educational inputs.',
+    rows: [
+      ['Observation 1', '=1', '=2', '=B2*C2', '=B2^2', 'B is predictor x, C is observed response y, D is xy and E is x².', '2.0'],
+      ['Observation 2', '=2', '=3', '=B3*C3', '=B3^2', 'Edit any B2:C5 observation to refit the linear model.', '6.0'],
+      ['Observation 3', '=3', '=5', '=B4*C4', '=B4^2', 'Rational arithmetic preserves intermediate products.', '15.0'],
+      ['Observation 4', '=4', '=4', '=B5*C5', '=B5^2', 'The response need not lie exactly on a straight line.', '16.0'],
+      ['Linear sufficient statistics', '=SUM(B2:B5)', '=SUM(C2:C5)', '=SUM(D2:D5)', '=SUM(E2:E5)', 'Σx = 10, Σy = 14, Σxy = 39, Σx² = 30. The sample count is fixed at four; update it in row 7 if changing the sample size.', '39.0'],
+      ['OLS fitted slope', '=4', '=B7*E6-B6^2', '=(B7*D6-B6*C6)/C7', '=D7*C7-(B7*D6-B6*C6)', 'Slope = (nΣxy − ΣxΣy)/(nΣx² − (Σx)²). Identical predictors make the denominator zero and the slope undefined.', '0.8'],
+      ['OLS fitted intercept', '=C6/B7', '=B6/B7', '=B8-D7*C8', '=D8+D7*C8', 'Intercept = mean(y) − slope × mean(x). E checks the fit passes through the sample means.', '1.5'],
+      ['Residual 1', '=C2', '=D8+D7*B2', '=B9-C9', '=D9^2', 'Residual is observed minus fitted; E is squared residual.', '-0.3'],
+      ['Residual 2', '=C3', '=D8+D7*B3', '=B10-C10', '=D10^2', 'These four residuals sum to zero for this intercept model.', '-0.1'],
+      ['Residual 3', '=C4', '=D8+D7*B4', '=B11-C11', '=D11^2', 'The largest positive residual is 1.1.', '1.1'],
+      ['Residual 4', '=C5', '=D8+D7*B5', '=B12-C12', '=D12^2', 'The final residual is −0.7.', '-0.7'],
+      ['Residual sum of squares', '=SUM(E9:E12)', '=SUM(D9:D12)', '=B13', '=C13', 'SSE = 1.8; E checks the residual sum is zero.', '1.8'],
+      ['Total sum of squares', '=B8', '=B7', '=(C2-B14)^2+(C3-B14)^2+(C4-B14)^2+(C5-B14)^2', '=D14/C14', 'SST = Σ(y − mean(y))² = 5. Constant responses make R² undefined.', '5.0'],
+      ['Coefficient of determination', '=D13', '=D14', '=1-B15/C15', '=D15*C15+B15', 'R² = 1 − SSE/SST = 0.64. This describes this sample fit, not prediction accuracy on new data.', '0.64'],
+      ['Predict a new response', '=5', '=D7', '=D8+C16*B16', '=solve D8+C16*x=5.5', 'At predictor 5, fitted y is 5.5; E solves the inverse linear question. Extrapolation needs domain judgment.', '5.5'],
+      ['Logistic baseline probability', '=1/5', 'supplied model input', '=B17/(1-B17)', '=D17/(1+D17)', 'D converts baseline probability p₀ = 0.2 to baseline odds 1/4. Valid probabilities lie strictly between zero and one.', '0.25'],
+      ['Supplied odds multiplier', '=3/2', 'per predictor step', '=B18', '', 'The assumed odds ratio is 1.5 per unit. This is supplied, not fitted; a logistic coefficient would be ln(1.5).', '1.5'],
+      ['Logistic probability at x = 0', '=0', '=D17*D18^B19', '=C19/(1+C19)', '=1-D19', 'p(x) = O₀ × OR^x / (1 + O₀ × OR^x). Integer predictor steps permit exact rational calculations.', '0.2'],
+      ['Logistic probability at x = 1', '=1', '=D17*D18^B20', '=C20/(1+C20)', '=D20/(1-D20)', 'At one step, odds are 3/8 and probability is 3/11.', '3/11'],
+      ['Logistic probability at x = 2', '=2', '=D17*D18^B21', '=C21/(1+C21)', '=D21/(1-D21)', 'At two steps, odds are 9/16 and probability is 9/25.', '0.36'],
+      ['Logistic probability at x = −1', '=-1', '=D17*D18^B22', '=C22/(1+C22)', '=D22/(1-D22)', 'A negative integer step divides baseline odds by the odds ratio, giving p = 1/7.', '1/7'],
+      ['Logistic probability at x = 3', '=3', '=D17*D18^B23', '=C23/(1+C23)', '=D23/(1-D23)', 'At three steps, odds are 27/32 and probability is 27/59. Exponents must stay within −10…10.', '27/59'],
+      ['Logit coefficient boundary', '=D18', 'requires natural log', '=log(B24)', '', 'Estimating or converting logit coefficients requires logarithms. Exact rational logarithms are outside this engine.', 'Unsupported expression'],
+      ['Sigmoid expression boundary', '=1', 'requires exponential', '=1/(1+exp(-B25))', '', 'The usual sigmoid and iterative logistic fitting need an approximate numerical engine. The odds rows above avoid exp only because rational odds and integer steps were supplied.', 'Unsupported expression'],
+      ['Linear residual reconciliation', '=SUM(D9:D12)', '=0', '=B26-C26', '=D26^2', 'Zero verifies the residual sum for the fitted intercept model. No hypothesis tests or confidence intervals are provided.', '0.0']
+    ]
+  },
   precision: {
     title: 'Workbook 9 · Precision & Guardrail Stress Lab',
     summary: 'Inspect large integers, repeating primes, decimal termination, parser precedence and bounded failure cases. Exactness means exact arithmetic on the supplied inputs, within the engine’s budgets.',
