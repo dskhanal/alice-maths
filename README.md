@@ -164,4 +164,4 @@ Run `node test-workbooks.cjs` from the application directory to verify the scena
 
 ## License & Required Attribution (Non-Commercial)
 
-### Alice by San — Non-Commercial Attribution License (CC BY-NC 4.0)
+Alice by San — Non-Commercial Attribution License (CC BY-NC 4.0)
