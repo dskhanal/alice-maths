@@ -1,4 +1,4 @@
-# alice-Math Grid & Omnibox
+# Alice-Math Grid & Omnibox
 
 
 An exact rational, dimensionally-typed spreadsheet and natural-language omnibox powered by **`AliceMath`** (originating from **Alice by San**).
