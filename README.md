@@ -1,5 +1,4 @@
-# Alice-Math Grid & Omnibox
-
+# AliceGrid & Omnibox (`AliceMath`)
 
 An exact rational, dimensionally-typed spreadsheet and natural-language omnibox powered by **`AliceMath`** (originating from **Alice by San**).
 
@@ -64,6 +63,8 @@ Every number is parsed directly from its string representation into a reduced `B
 * Instead, it divides all prime factors of `2n` and `5n` out of the reduced denominator `this.d`.
 * **Exact Termination Theorem**: A reduced fraction $n/d$ has a terminating base-10 decimal expansion *if and only if* $d$ has no prime factors other than $2$ and $5$ ($d = 2^j \cdot 5^k$).
 * If the stripped denominator equals `1n`, `Q.text()` performs exact `BigInt` long division to output the exact decimal (up to 5,000 decimal places). If any other prime factor remains (e.g., `1/3` or `1/97`) or if the decimal exceeds 5,000 digits, it returns the exact reduced fraction `${this.n}/${this.d}` rather than rounding or fabricating precision.
+
+Exact integers display without a trailing `.0`, including division, cell references and range aggregates: `14/2` and `SUM(...)` returning seven both display `7`. Strict Fraction explicitly shows `7/1`; approximate results retain `≈`. This formatting change does not alter stored formulas or rational values.
 
 ### 4. Implicit Juxtaposition Binding Power in a Pratt Parser (`class Parser`)
 Natural math expressions mix explicit operators (`2 * x + 3`) with implicit juxtaposition (`2x`, `500 km`, `3(x + 1)`). `AliceMath`’s `Parser` handles this in a single Pratt-style precedence loop without a preprocessor:
@@ -262,7 +263,7 @@ python3 -m unittest discover -s tests -p test_harness.py
 python3 tests/test_reference.py --output .test-results/reference.json
 ```
 
-- **93 corrective regressions** cover full-grid folding, blank/text/error behavior, native and Excel-compatible function semantics, reserved-name migration, shared syntax/error codes, CSV protection, bounded ZIP decompression, history sharing, quota retry and two-tab conflict recovery. **395 independent corrective-reference cases** use Python Fraction/Decimal/math for aggregates, scientific literals, imported functions and log10.
+- **106 corrective regressions** cover full-grid folding, blank/text/error behavior, native and Excel-compatible function semantics, reserved-name migration, shared syntax/error codes, CSV protection, bounded ZIP decompression, history sharing, quota retry and two-tab conflict recovery. **395 independent corrective-reference cases** use Python Fraction/Decimal/math for aggregates, scientific literals, imported functions and log10.
 - **69 spreadsheet helper/controller checks** cover nested functions, bounds, fixed/relative references, atomic fills, undo/redo, imported comments and palette persistence/contrast. **566 independent Python Decimal/Fraction/math cases** verify ROUND, FLOOR, GCD and LCM.
 - **381 workbook/controller checks** cover scenario outputs, references, units, storage, comments and Float64 boundaries. This is a headless controller suite, not a browser accessibility or end-to-end UI suite.
 - **1,128 independent-reference cases** compare AliceMath with Python `fractions.Fraction`: 500 arithmetic expressions; 100 each of powers, affine solves, exact square roots, conversions, decimal inputs and derived dimensions; four large-value cases; and 24 fixed regression/guardrail fixtures. Rational values are compared as exact reduced numerator/denominator pairs, never with a float tolerance. Conversion checks verify both target-unit and SI magnitudes. Decimal strings are generated independently using integer arithmetic.

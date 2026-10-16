@@ -10,7 +10,7 @@
     AliceWorkbookIO.inspectZip(buffer);
     if(typeof Worker==='undefined'||location.protocol==='file:')throw new Error('Safe XLSX import requires a worker over HTTPS or localhost. JSON and CSV still work here.');
     return new Promise((resolve,reject)=>{
-      const worker=new Worker('xlsx-worker.js?v=1.0.2-r3');
+      const worker=new Worker('xlsx-worker.js?v=1.0.3');
       const timer=setTimeout(()=>{worker.terminate();importWorkerJob=null;reject(new Error('XLSX parsing took too long. Reduce the source workbook.'));},10000);
       importWorkerJob={worker,timer,reject};
       const finish=()=>{clearTimeout(timer);worker.terminate();if(importWorkerJob?.worker===worker)importWorkerJob=null;};

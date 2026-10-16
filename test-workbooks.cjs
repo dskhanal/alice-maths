@@ -47,7 +47,7 @@ await check('linear first power accepted', () => assert.equal(AliceMath.calculat
 await check('zero-power identity accepted', () => assert.equal(AliceMath.calculate('solve x^0=1').text,'all x'));
 await check('full-grid references and ranges', async () => {
   const out = vm.runInContext(`rawCells = new Map([['I19','=5'],['Z26','=7'],['A1','=I19+Z26'],['A2','=SUM(I19:I19)']]); evaluatedCells.clear(); [evaluateCell('A1').text,evaluateCell('A2').text];`,context);
-  assert.equal(out[0],'12.0'); assert.equal(out[1],'5.0');
+  assert.equal(out[0],'12'); assert.equal(out[1],'5');
 });
 await check('compound float drift is simulated', async () => {
   const value=vm.runInContext(`computeFloatComparison('(1+1/10)^8',AliceMath.calculate('(1+1/10)^8')).naiveFloat`,context);
@@ -187,10 +187,10 @@ for (const rowLimit of [600, 1200]) {
       evaluatedCells.clear();
       [evaluateCell('A1').text,evaluateCell('A2').text,evaluateCell('A3').text,evaluateCell('A4').text,evaluateCell('A5').text,evaluateCell('A6').text,evaluateCell('A7').text,evaluateCell('A8').text,parseCoord('Z${rowLimit}').rowIdx,parseCoord('B0'),parseCoord('B${rowLimit+1}')];
     `,scaled);
-    assert.deepEqual(Array.from(output.slice(0,5)),['10.0','9.0','3.0','24.0','7.0']);
+    assert.deepEqual(Array.from(output.slice(0,5)),['10','9','3','24','7']);
     assert.match(output[5],/Invalid cell coordinate/);
     assert.match(output[6],/Invalid cell range/);
-    assert.equal(output[7],'3.0'); assert.equal(output[8],rowLimit-1);
+    assert.equal(output[7],'3'); assert.equal(output[8],rowLimit-1);
     assert.equal(output[9],null);assert.equal(output[10],null);
   });
 }
