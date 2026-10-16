@@ -8,6 +8,10 @@ const unitsRegistry = JSON.parse(JSON.stringify(AliceMath.DEFAULT_UNITS));
 let rawCells = new Map();       // coord -> raw string
 let evaluatedCells = new Map(); // coord -> evaluation metadata
 let selectedCoord = 'B2';
+let selectionRange = null;
+let calculationMode = 'exact';
+let decimalPrecision = 34;
+const workbookCalculationSettings = new Map();
 let displayFormat = 'auto';     // 'auto' | 'fraction' | 'float'
 let selectedTemplate = 'audit';
 let wrapCellText = false;
@@ -21,7 +25,26 @@ const workbookSessions = new Map();
 let hasLoadedWorkbook = false;
 let customWorkbookCounter = 0;
 let workbookStorageError = '';
+let workbookStore = null;
+let workbookStoreReadFailed = false;
+let workbookSaveTimer = null;
+let workbookSaveTask = Promise.resolve();
+const dirtyWorkbooks = new Set();
+const workbookRevisions = new Map();
+const savedWorkbookJSON = new Map();
+const workbookConflicts = new Set();
+let workbookSaving = false;
 let pendingDeleteWorkbookId = null;
+let importIssues = new Map();
+const workbookUnits = new Map();
+const workbookIssues = new Map();
+const workbookHistories = new Map();
+let legacyUnits = {};
+let pendingImport = null;
+let pendingXlsxSheets = null;
+let importRevision = 0;
+let importWorkerJob = null;
+
 
 const WORKBOOK_TEMPLATES = {
   audit: {
@@ -77,7 +100,7 @@ const unitCountBadge = document.querySelector('#unit-count-badge');
 
 // Coordinate Helpers
 function parseCoord(coord) {
-  const m = /^([A-Z])(\d+)$/i.exec(coord.trim());
+  const m = /^\$?([A-Z])\$?(\d+)$/i.exec(coord.trim());
   if (!m) return null;
   const colIdx = COLS.indexOf(m[1].toUpperCase());
   const rowIdx = Number(m[2]) - 1;
@@ -100,6 +123,28 @@ function expandRange(startCoord, endCoord) {
   return out;
 }
 
+function normalizeCalculationSettings(settings) {
+  if (settings === undefined) return { mode: 'exact', precision: 34 };
+  if (!settings || !['exact', 'approximate'].includes(settings.mode) || !AliceApprox.PRECISIONS.includes(settings.precision)) throw new Error('Invalid saved calculation settings.');
+  return { mode: settings.mode, precision: settings.precision };
+}
+
+function calculationSettings() {
+  return { mode: calculationMode, precision: decimalPrecision };
+}
+
+function updateCalculationControls() {
+  const approximate = calculationMode === 'approximate';
+  document.querySelector('#calculation-mode').value = calculationMode;
+  document.querySelector('#decimal-precision').value = String(decimalPrecision);
+  document.querySelector('#decimal-precision').disabled = !approximate;
+  document.querySelector('#calculation-mode-note').textContent = approximate ? '≈ marks decimal approximations; exact results stay exact.' : 'Exact fractions; irrational results show a limit comment.';
+}
+
+function calculateExpression(expression, context) {
+  return AliceApprox.calculate(expression, unitsRegistry, context.values, { enabled: calculationMode === 'approximate', precision: decimalPrecision });
+}
+
 function decodeCustomWorkbookStore(json) {
   const data = JSON.parse(json);
   if (data.schema !== 'alice.custom-workbooks/v1' || !Array.isArray(data.workbooks)) throw new Error('Unsupported workbook store.');
@@ -111,7 +156,7 @@ function decodeCustomWorkbookStore(json) {
       if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string' || !parseCoord(entry[0]) || typeof entry[1] !== 'string') throw new Error('Invalid saved cell.');
       cells.set(parseCoord(entry[0]).coord, entry[1]);
     }
-    workbooks.set(book.id, { id: book.id, name: book.name, cells });
+    workbooks.set(book.id, { id: book.id, name: book.name, cells, calculation: normalizeCalculationSettings(book.calculation), units: book.units === undefined ? undefined : AliceWorkbookIO.validateUnits(book.units, Number.MAX_SAFE_INTEGER, true), importIssues: AliceWorkbookIO.validateIssues(book.importIssues || {}, Object.fromEntries(cells), {cols:COLS,rows:ROWS}) });
   }
   const units = {};
   for (const [name, definition] of Object.entries(data.units || {})) {
@@ -119,19 +164,41 @@ function decodeCustomWorkbookStore(json) {
     AliceMath.Q.read(definition[0]);
     units[name] = definition;
   }
-  return { workbooks, active: data.active, units };
+  return { workbooks, active: data.active, units, unitScope: data.unitScope };
 }
 
+function workbookRecord(book) {
+  return {id:book.id,name:book.name,cells:[...book.cells],calculation:book.calculation||normalizeCalculationSettings(),units:book.units||{},importIssues:book.importIssues||{}};
+}
+function storageRepository() {
+  if (!workbookStore) workbookStore = new AliceWorkbookStorage.Store(localStorage, typeof navigator === 'undefined' ? null : navigator.locks);
+  return workbookStore;
+}
+function decodeStoredBook(record) {
+  return decodeCustomWorkbookStore(JSON.stringify({schema:'alice.custom-workbooks/v1',workbooks:[record],unitScope:'workbook'})).workbooks.get(record.id);
+}
 function restoreCustomWorkbooks() {
   try {
-    const json = localStorage.getItem(CUSTOM_WORKBOOK_STORAGE_KEY);
-    if (!json) return 'audit';
-    const saved = decodeCustomWorkbookStore(json);
-    Object.assign(unitsRegistry, saved.units);
-    for (const [id, book] of saved.workbooks) { customWorkbooks.set(id, book); appendCustomWorkbookOption(book); }
-    return customWorkbooks.has(saved.active) || Object.hasOwn(WORKBOOK_TEMPLATES, saved.active) ? saved.active : 'audit';
-  } catch (_) {
-    workbookStorageError = 'Browser save unavailable. Use Export JSON to keep a copy.';
+    const repository = storageRepository(), records = repository.list();
+    const savedJSON = localStorage.getItem(CUSTOM_WORKBOOK_STORAGE_KEY);
+    const legacy = savedJSON ? decodeCustomWorkbookStore(savedJSON) : {workbooks:new Map(),units:{},active:'audit',unitScope:'workbook'};
+    legacyUnits = {};
+    const existing = new Set(records.map(r=>r.id));
+    for (const [id,book] of legacy.workbooks) if (!existing.has(id)) {
+      if (book.units === undefined) book.units = legacy.units;
+      customWorkbooks.set(id,book);workbookRevisions.set(id,0);dirtyWorkbooks.add(id);appendCustomWorkbookOption(book);
+    }
+    for (const record of records) {
+      workbookRevisions.set(record.id,record.revision);
+      if (record.deleted) continue;
+      const book=decodeStoredBook(record.book);customWorkbooks.set(book.id,book);savedWorkbookJSON.set(book.id,JSON.stringify(workbookRecord(book)));appendCustomWorkbookOption(book);
+    }
+    workbookStoreReadFailed=false;
+    const active=localStorage.getItem(AliceWorkbookStorage.ACTIVE)||legacy.active;
+    return customWorkbooks.has(active)||Object.hasOwn(WORKBOOK_TEMPLATES,active)?active:'audit';
+  } catch (error) {
+    workbookStoreReadFailed=true;
+    workbookStorageError='Browser restore failed; stored data was left untouched. Reload to retry; Export JSON for current session data. '+error.message;
     return 'audit';
   }
 }
@@ -139,8 +206,8 @@ function restoreCustomWorkbooks() {
 function captureCurrentCustomWorkbook() {
   if (!hasLoadedWorkbook) return;
   const workbook = customWorkbooks.get(selectedTemplate);
-  if (workbook) workbook.cells = new Map(rawCells);
-  else if (Object.hasOwn(WORKBOOK_TEMPLATES, selectedTemplate)) workbookSessions.set(selectedTemplate, new Map(rawCells));
+  if (workbook) { dirtyWorkbooks.add(workbook.id); workbook.cells = new Map(rawCells); workbook.calculation = calculationSettings(); workbook.units = customUnitDefinitions(); workbook.importIssues = Object.fromEntries(importIssues); }
+  else if (Object.hasOwn(WORKBOOK_TEMPLATES, selectedTemplate)) { workbookSessions.set(selectedTemplate, new Map(rawCells)); workbookCalculationSettings.set(selectedTemplate, calculationSettings()); workbookUnits.set(selectedTemplate, customUnitDefinitions()); workbookIssues.set(selectedTemplate, Object.fromEntries(importIssues)); }
 }
 
 function customUnitDefinitions() {
@@ -148,23 +215,114 @@ function customUnitDefinitions() {
 }
 
 function persistCustomWorkbooks() {
-  if (!workbookStorageError) {
-    try {
-      const workbooks = [...customWorkbooks.values()].map(book => ({ id: book.id, name: book.name, cells: [...book.cells] }));
-      localStorage.setItem(CUSTOM_WORKBOOK_STORAGE_KEY, JSON.stringify({ schema: 'alice.custom-workbooks/v1', active: selectedTemplate, workbooks, units: customUnitDefinitions() }));
-    } catch (_) {
-      workbookStorageError = 'Browser save unavailable. Use Export JSON to keep a copy.';
-    }
+  captureCurrentCustomWorkbook();
+  try { if (localStorage.getItem(AliceWorkbookStorage.ACTIVE)!==selectedTemplate) localStorage.setItem(AliceWorkbookStorage.ACTIVE,selectedTemplate); } catch (_) {}
+  if (typeof setTimeout === 'function') {
+    clearTimeout(workbookSaveTimer);
+    workbookSaveTimer=setTimeout(()=>{workbookSaveTimer=null;flushWorkbookSaves();},150);
   }
   updateWorkbookStorageStatus();
-  if (customWorkbooks.has(selectedTemplate)) updateWorkbookGuide(selectedCoord);
 }
-
+async function flushWorkbookSaves() {
+  if (typeof clearTimeout === 'function') clearTimeout(workbookSaveTimer);
+  workbookSaveTimer=null;
+  const task=workbookSaveTask.then(async()=>{
+    if (workbookStoreReadFailed) { updateWorkbookStorageStatus();return false; }
+    workbookSaving=true;updateWorkbookStorageStatus();let failed=false;
+    for (const id of [...dirtyWorkbooks]) {
+      const book=customWorkbooks.get(id);if(!book){dirtyWorkbooks.delete(id);continue;}
+      if(workbookConflicts.has(id)){failed=true;continue;}
+      const record=workbookRecord(book),json=JSON.stringify(record);
+      if(json===savedWorkbookJSON.get(id)){dirtyWorkbooks.delete(id);continue;}
+      try {
+        const result=await storageRepository().save(record,workbookRevisions.get(id)||0);
+        workbookRevisions.set(id,result.revision);savedWorkbookJSON.set(id,json);
+        if(customWorkbooks.has(id)&&JSON.stringify(workbookRecord(customWorkbooks.get(id)))===json)dirtyWorkbooks.delete(id);
+      } catch(error) {
+        failed=true;
+        if(error.code==='STORAGE_CONFLICT')workbookConflicts.add(id);
+        workbookStorageError=error.code==='STORAGE_CONFLICT'?error.message:'Browser save unavailable. Use Retry Save or Export JSON. '+error.message;
+      }
+    }
+    if(!failed&&!workbookConflicts.size)workbookStorageError='';
+    workbookSaving=false;updateWorkbookStorageStatus();return !failed;
+  });
+  workbookSaveTask=task.catch(error=>{workbookSaving=false;workbookStorageError='Browser save unavailable. Use Retry Save or Export JSON. '+error.message;updateWorkbookStorageStatus();return false;});
+  return workbookSaveTask;
+}
+function legacyUnitNames() { return Object.keys(customUnitDefinitions()).filter(name=>AliceMath.Syntax.RESERVED.includes(name)); }
 function updateWorkbookStorageStatus() {
-  const status = document.querySelector('#workbook-storage-status');
-  status.textContent = workbookStorageError || (customWorkbooks.has(selectedTemplate) ? 'Saved in this browser' : '');
-  status.classList.toggle('is-warning', !!workbookStorageError);
-  document.querySelector('#delete-workbook').hidden = !customWorkbooks.has(selectedTemplate);
+  const status=document.querySelector('#workbook-storage-status'),conflict=workbookConflicts.has(selectedTemplate),legacy=legacyUnitNames();
+  const warning=conflict?'Another tab changed this workbook. Your local cells are retained. Load saved version or save a conflict copy.':workbookStorageError;
+  status.textContent=warning||(workbookSaving?'Saving…':customWorkbooks.has(selectedTemplate)?dirtyWorkbooks.has(selectedTemplate)?'Changes waiting to save':'Saved in this browser':'');
+  if(legacy.length)status.textContent+=' · Legacy reserved units: '+legacy.join(', ')+'. Rename them in the unit registry.';
+  status.classList.toggle('is-warning',!!warning||!!legacy.length);
+  document.querySelector('#delete-workbook').hidden=!customWorkbooks.has(selectedTemplate);
+  document.querySelector('#retry-workbook-save').hidden=!workbookStorageError||conflict||workbookStoreReadFailed;
+  document.querySelector('#save-conflict-copy').hidden=!conflict;
+  document.querySelector('#load-shared-version').hidden=!conflict;
+  document.querySelector('#rename-legacy-unit').hidden=!legacy.length;
+  if(customWorkbooks.has(selectedTemplate))updateWorkbookGuide(selectedCoord);
+}
+function handleWorkbookStorageEvent(event) {
+  if(!event.key?.startsWith(AliceWorkbookStorage.PREFIX)&&event.key!==null)return;
+  try {
+    for(const record of storageRepository().list()) {
+      const id=record.id;if(record.revision===(workbookRevisions.get(id)||0))continue;
+      if(customWorkbooks.has(id)) {workbookConflicts.add(id);continue;}
+      workbookRevisions.set(id,record.revision);
+      if(!record.deleted){const book=decodeStoredBook(record.book);customWorkbooks.set(id,book);savedWorkbookJSON.set(id,JSON.stringify(workbookRecord(book)));appendCustomWorkbookOption(book);}
+    }
+    // A site-data clear must not let an old tab recreate removed books silently.
+    for(const [id,revision] of workbookRevisions)if(revision&&!storageRepository().read(id)&&customWorkbooks.has(id))workbookConflicts.add(id);
+    updateWorkbookStorageStatus();
+  } catch(error){workbookStorageError='Could not read shared workbook changes. Export JSON. '+error.message;updateWorkbookStorageStatus();}
+}
+function removeWorkbookOption(id) {
+  const group=document.querySelector('#custom-workbook-options');if(!group)return;
+  for(const option of [...group.children])if(option.value===id)option.remove();
+  if(!group.children.length)group.remove();
+}
+function adoptSharedWorkbook(id, record) {
+  workbookConflicts.delete(id);dirtyWorkbooks.delete(id);savedWorkbookJSON.delete(id);workbookHistories.delete(id);removeWorkbookOption(id);
+  workbookRevisions.set(id,record?.revision||0);
+  if(record&&!record.deleted){const book=decodeStoredBook(record.book);customWorkbooks.set(id,book);savedWorkbookJSON.set(id,JSON.stringify(workbookRecord(book)));appendCustomWorkbookOption(book);}
+  else customWorkbooks.delete(id);
+}
+async function loadSharedWorkbook() {
+  await flushWorkbookSaves();
+  const id=selectedTemplate,record=storageRepository().read(id);
+  adoptSharedWorkbook(id,record);hasLoadedWorkbook=false;workbookStorageError='';
+  loadTemplate(record&&!record.deleted?id:'audit');
+}
+async function saveConflictCopy() {
+  captureCurrentCustomWorkbook();
+  const id=selectedTemplate,book=customWorkbooks.get(id),snapshot=workbookSnapshot(),record=storageRepository().read(id);
+  if(!book)throw new Error('Select a custom workbook first.');
+  if(typeof formulaInput.value==='string'&&formulaInput.value!==(rawCells.get(selectedCoord)||'')){
+    const draft=formulaInput.value.startsWith("'")?formulaInput.value:formulaInput.value.trim();
+    if(draft.length>AliceWorkbookIO.MAX_TEXT)throw new Error('Uncommitted cell text exceeds 2000 characters. Shorten it or export JSON first.');
+    const cells=new Map(snapshot.cells);if(draft)cells.set(selectedCoord,draft);else cells.delete(selectedCoord);snapshot.cells=[...cells];snapshot.issues=snapshot.issues.filter(([c])=>c!==selectedCoord);
+  }
+  const name=uniqueImportedName(book.name+' (conflict copy)');
+  adoptSharedWorkbook(id,record);hasLoadedWorkbook=false;
+  const copy=createCustomWorkbook(name);
+  changeWorkbook('Recover conflict copy',()=>{rawCells=new Map(snapshot.cells);importIssues=new Map(snapshot.issues);setWorkbookUnits(snapshot.units);calculationMode=snapshot.calculation.mode;decimalPrecision=snapshot.calculation.precision;selectedCoord=snapshot.selected;});
+  await flushWorkbookSaves();return copy;
+}
+function renameLegacyUnit(oldName,newName) {
+  if(!legacyUnitNames().includes(oldName))throw new Error('Choose a legacy reserved unit.');
+  newName=String(newName).trim().toLowerCase();
+  AliceWorkbookIO.validateUnits({[newName]:unitsRegistry[oldName]});
+  if(Object.hasOwn(unitsRegistry,newName))throw new Error('This unit name already exists.');
+  const rewrite=raw=>raw.replace(/(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|\$?[a-z]\$?\d+\b|[a-z]+|π/gi,token=>(token==='π'?'pi':token.toLowerCase())===oldName?newName:token);
+  changeWorkbook('Rename unit '+oldName+' to '+newName,()=>{
+    unitsRegistry[newName]=unitsRegistry[oldName];delete unitsRegistry[oldName];
+    for(const [coord,raw] of rawCells)if(raw.startsWith('=')){
+      const updated=rewrite(raw);rawCells.set(coord,updated);
+      if(importIssues.get(coord)?.raw===raw)importIssues.set(coord,{...importIssues.get(coord),raw:updated});
+    }
+  });
 }
 
 function validateNewWorkbookName(value) {
@@ -198,71 +356,160 @@ function appendCustomWorkbookOption(workbook) {
 function createCustomWorkbook(value) {
   const name = validateNewWorkbookName(value);
   let id;
-  do { id = 'user-' + Date.now().toString(36) + '-' + (++customWorkbookCounter).toString(36); } while (customWorkbooks.has(id));
-  const workbook = { id, name, cells: new Map() };
-  customWorkbooks.set(id, workbook);
+  do { id = 'user-' + Date.now().toString(36) + '-' + (++customWorkbookCounter).toString(36) + '-' + Math.random().toString(36).slice(2,10); } while (customWorkbooks.has(id));
+  const workbook = { id, name, cells: new Map(), calculation: normalizeCalculationSettings(), units: {}, importIssues: {} };
+  customWorkbooks.set(id, workbook);dirtyWorkbooks.add(id);
   appendCustomWorkbookOption(workbook);
   loadTemplate(id);
   return workbook;
 }
 
-function deleteCustomWorkbook(id) {
-  if (!customWorkbooks.has(id)) throw new Error('This workbook is no longer available.');
-  if (workbookStorageError) throw new Error('Browser storage is unavailable. Export your workbook and retry when storage is available.');
-  captureCurrentCustomWorkbook();
-  const nextActive = selectedTemplate === id ? 'audit' : selectedTemplate;
-  const workbooks = [...customWorkbooks.values()].filter(book => book.id !== id).map(book => ({ id: book.id, name: book.name, cells: [...book.cells] }));
-  // Save first: a storage failure must leave the workbook and its selector intact.
-  try {
-    localStorage.setItem(CUSTOM_WORKBOOK_STORAGE_KEY, JSON.stringify({ schema: 'alice.custom-workbooks/v1', active: nextActive, workbooks, units: customUnitDefinitions() }));
-  } catch (_) {
-    throw new Error('Could not delete the saved workbook. Browser storage is unavailable; your workbook is still here.');
-  }
-  customWorkbooks.delete(id);
-  const group = document.querySelector('#custom-workbook-options');
-  if (group) {
-    for (const option of [...group.children]) if (option.value === id) option.remove();
-    if (!group.children.length) group.remove();
-  }
-  workbookSessions.delete(id);
-  if (selectedTemplate === id) loadTemplate(nextActive);
-  else updateWorkbookStorageStatus();
+async function deleteCustomWorkbook(id) {
+  if(!customWorkbooks.has(id))throw new Error('This workbook is no longer available.');
+  if(workbookStoreReadFailed)throw new Error('Reload after the browser restore failure before deleting saved data.');
+  captureCurrentCustomWorkbook();await flushWorkbookSaves();
+  if(workbookConflicts.has(id))throw new Error('Another tab changed this workbook. Load its saved version before deleting.');
+  try {const result=await storageRepository().remove(id,workbookRevisions.get(id)||0);workbookRevisions.set(id,result.revision);}
+  catch(error){throw new Error('Could not delete the saved workbook; your workbook is still here. '+error.message);}
+  dirtyWorkbooks.delete(id);savedWorkbookJSON.delete(id);customWorkbooks.delete(id);removeWorkbookOption(id);
+  workbookSessions.delete(id);workbookHistories.delete(id);workbookUnits.delete(id);workbookIssues.delete(id);workbookCalculationSettings.delete(id);
+  if(selectedTemplate===id){hasLoadedWorkbook=false;loadTemplate('audit');}else updateWorkbookStorageStatus();
 }
 
 function loadTemplate(name) {
   captureCurrentCustomWorkbook();
   selectedTemplate = customWorkbooks.has(name) || Object.hasOwn(WORKBOOK_TEMPLATES, name) ? name : 'audit';
   const custom = customWorkbooks.get(selectedTemplate);
+  const settings = normalizeCalculationSettings(custom?.calculation || workbookCalculationSettings.get(selectedTemplate));
+  calculationMode = settings.mode; decimalPrecision = settings.precision;
+  updateCalculationControls();
+  setWorkbookUnits(custom?.units || workbookUnits.get(selectedTemplate) || legacyUnits);
+  importIssues = new Map(Object.entries(custom?.importIssues || workbookIssues.get(selectedTemplate) || {}));
   rawCells = custom ? new Map(custom.cells) : workbookSessions.has(selectedTemplate) ? new Map(workbookSessions.get(selectedTemplate)) : new Map(Object.entries(WORKBOOK_TEMPLATES[selectedTemplate]));
   hasLoadedWorkbook = true;
   document.querySelector('#template-select').value = selectedTemplate;
   recalculateAll();
   selectCell(custom ? 'A1' : 'D2');
+  renderUnitsRegistry(); updateHistoryControls();
   persistCustomWorkbooks();
+}
+
+function setWorkbookUnits(definitions) {
+  for (const name of Object.keys(unitsRegistry)) delete unitsRegistry[name];
+  Object.assign(unitsRegistry, JSON.parse(JSON.stringify(AliceMath.DEFAULT_UNITS)), JSON.parse(JSON.stringify(definitions || {})));
+}
+function historyForWorkbook() {
+  if (!workbookHistories.has(selectedTemplate)) workbookHistories.set(selectedTemplate, new AliceHistory.History());
+  return workbookHistories.get(selectedTemplate);
+}
+function updateHistoryControls(message) {
+  const history = historyForWorkbook();
+  const undo = document.querySelector('#undo-workbook'), redo = document.querySelector('#redo-workbook');
+  undo.disabled = !history.undoLabel; redo.disabled = !history.redoLabel;
+  undo.title = history.undoLabel ? 'Undo ' + history.undoLabel : 'Nothing to undo';
+  redo.title = history.redoLabel ? 'Redo ' + history.redoLabel : 'Nothing to redo';
+  if (message !== undefined) document.querySelector('#edit-history-status').textContent = message;
+}
+function workbookSnapshot() {
+  return { cells: [...rawCells], calculation: calculationSettings(), units: customUnitDefinitions(), issues: [...importIssues], selected: selectedCoord };
+}
+function restoreWorkbookSnapshot(state) {
+  rawCells = new Map(state.cells); importIssues = new Map(state.issues);
+  calculationMode = state.calculation.mode; decimalPrecision = state.calculation.precision;
+  setWorkbookUnits(state.units); updateCalculationControls(); renderUnitsRegistry();
+  recalculateAll(); selectCell(parseCoord(state.selected) ? state.selected : 'A1');
+  captureCurrentCustomWorkbook(); persistCustomWorkbooks();
+}
+function changeWorkbook(label, mutate) {
+  const before = workbookSnapshot();
+  try {
+    mutate();
+    const after = workbookSnapshot();
+    const changed = historyForWorkbook().record(label, before, after);
+    if (changed) {
+      if (typeof formulaInput.value==='string' && formulaInput.value===(new Map(before.cells).get(before.selected)||'')) formulaInput.value=rawCells.get(selectedCoord)||'';
+      updateCalculationControls(); renderUnitsRegistry(); recalculateAll();
+      captureCurrentCustomWorkbook(); persistCustomWorkbooks();
+      updateHistoryControls(label + ' — Undo available');
+    }
+    return changed;
+  } catch (error) {
+    restoreWorkbookSnapshot(before);
+    throw error;
+  }
+}
+function undoWorkbook(redo = false) {
+  const result = redo ? historyForWorkbook().redo() : historyForWorkbook().undo();
+  if (!result) return;
+  restoreWorkbookSnapshot(result.state);
+  updateHistoryControls((redo ? 'Redid ' : 'Undid ') + result.label);
+}
+function applyImportedWorkbook(model, target, name) {
+  if (model.blockedReason) throw new Error(model.blockedReason);
+  const options = {cols:COLS,rows:ROWS};
+  const cells = AliceWorkbookIO.normalizedCells(model.cells, options);
+  const units = AliceWorkbookIO.validateUnits(model.units || {});
+  const issues = AliceWorkbookIO.validateIssues(model.issues || {}, cells, options);
+  const calculation = normalizeCalculationSettings(model.calculation);
+  if (target === 'new') createCustomWorkbook(name);
+  else if (target !== 'current') throw new Error('Choose an import destination.');
+  changeWorkbook('Import ' + model.format.toUpperCase(), () => {
+    rawCells = new Map(Object.entries(cells)); importIssues = new Map(Object.entries(issues));
+    if (model.format === 'json' || target === 'new') {
+      setWorkbookUnits(units); calculationMode = calculation.mode; decimalPrecision = calculation.precision;
+    }
+    selectedCoord = 'A1';
+  });
+  selectCell('A1');
+  return selectedTemplate;
+}
+function uniqueImportedName(value) {
+  const base = String(value || 'Imported Workbook').trim().slice(0,70) || 'Imported Workbook';
+  let name = base, suffix = 2;
+  while ([...customWorkbooks.values()].some(book => book.name.toLowerCase() === name.toLowerCase())) name = base + ' (' + suffix++ + ')';
+  return name;
 }
 
 // Convert an evaluated AliceMath result back into an exact canonical token string for downstream cells
 function createReferenceContext(expr) {
-  return { values: Object.create(null), reserved: new Set(expr.toLowerCase().match(/[a-z]+/g) || []), next: 0 };
+  return { values: Object.create(null), floatValues: Object.create(null), reserved: new Set(expr.toLowerCase().match(/[a-z]+/g) || []), next: 0 };
+}
+
+function referenceAlias(value, context) {
+  if (!context) throw new Error('A typed reference requires a calculation context.');
+  let name;
+  do {
+    let id = context.next++, suffix = '';
+    do { suffix = String.fromCharCode(97 + id % 26) + suffix; id = Math.floor(id / 26); } while (id);
+    name = 'cellref' + suffix;
+  } while (context.reserved.has(name) || Object.hasOwn(unitsRegistry, name) || Object.hasOwn(context.values, name));
+  context.values[name] = value;
+  return name;
+}
+
+function readableResolvedExpression(expression, context) {
+  return expression.replace(/\bcellref[a-z]+\b/gi, name => {
+    const input = context.values[name];
+    if (!input) return name;
+    const units = input.dim.map((exponent, i) => exponent ? ['m', 's', 'kg'][i] + (exponent === 1 ? '' : '^' + exponent) : '').filter(Boolean).join(' * ');
+    return input.approximate ? `(≈ ${input.approximateValue}${units ? ' ' + units : ''})` : `(${input.b.n}/${input.b.d}${units ? ' * '+units : ''})`;
+  });
 }
 
 function canonicalToken(evalObj, context) {
+  if (evalObj?.status === 'result' && evalObj.approximate === true) {
+    return referenceAlias({ approximate: true, approximateValue: evalObj.baseApproximateValue, dim: evalObj.dim }, context);
+  }
+
   if (!evalObj || evalObj.status !== 'result' || !evalObj.rational) {
-    throw new Error(evalObj?.text || 'Referenced cell is unresolved.');
+    throw AliceMath.Syntax.error(evalObj?.code || 'UNRESOLVED_REFERENCE', evalObj?.code === 'DIVISION_BY_ZERO' ? 'Division by zero.' : evalObj?.text || 'Referenced cell is unresolved.');
   }
   // Conversion results expose a target-unit magnitude; downstream arithmetic needs SI magnitude.
   const q = evalObj.baseRational || evalObj.rational;
   const dim = evalObj.dim || [0, 0, 0];
   // Keep valid large rationals as typed values rather than reparsing oversized numeric tokens.
   if (context && (String(q.n).replace('-', '').length > 100 || String(q.d).length > 100)) {
-    let name;
-    do {
-      let id = context.next++, suffix = '';
-      do { suffix = String.fromCharCode(97 + id % 26) + suffix; id = Math.floor(id / 26); } while (id);
-      name = 'cellref' + suffix;
-    } while (context.reserved.has(name) || Object.hasOwn(unitsRegistry, name) || Object.hasOwn(context.values, name));
-    context.values[name] = new AliceMath.V(q, new AliceMath.Q(0), dim);
-    return name;
+    return referenceAlias(new AliceMath.V(q, new AliceMath.Q(0), dim), context);
   }
   const frac = `(${q.n}/${q.d})`;
   const unitFactors = dim
@@ -275,16 +522,27 @@ function canonicalToken(evalObj, context) {
 // Evaluate a single cell with recursive DAG resolution and cycle detection
 function evaluateCell(coord, visiting = new Set()) {
   if (evaluatedCells.has(coord)) return evaluatedCells.get(coord);
-  const raw = (rawCells.get(coord) || '').trim();
+  const originalRaw = rawCells.get(coord) || '';
+  const raw = originalRaw.startsWith("'") ? originalRaw : originalRaw.trim();
   if (!raw) {
     const emptyRes = { kind: 'empty', raw: '', display: '', status: 'empty' };
     evaluatedCells.set(coord, emptyRes);
     return emptyRes;
   }
 
+  const importedIssue = importIssues.get(coord);
+  if (importedIssue && importedIssue.raw === originalRaw) {
+    const result = { kind: 'error', raw, status: 'unsupported', text: importedIssue.reason, resolvedExpr: raw.replace(/^=/, ''), display: raw.replace(/^=/, '') };
+    evaluatedCells.set(coord, result); return result;
+  }
+  if (raw.startsWith("'")) {
+    const result = { kind: 'label', raw, display: raw.slice(1), status: 'label' };
+    evaluatedCells.set(coord, result); return result;
+  }
+
   // Plain text label if it doesn't start with '=' and isn't a pure number
   const isFormula = raw.startsWith('=');
-  const isPureNumber = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw);
+  const isPureNumber = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(raw);
   if (!isFormula && !isPureNumber) {
     const labelRes = { kind: 'label', raw, display: raw, status: 'label' };
     evaluatedCells.set(coord, labelRes);
@@ -309,13 +567,13 @@ function evaluateCell(coord, visiting = new Set()) {
   try {
     const referenceContext = createReferenceContext(expr);
     expr = expandMacrosAndCellRefs(expr, visiting, referenceContext);
-    const calc = AliceMath.calculate(expr, unitsRegistry, referenceContext.values);
-    const floatApprox = computeFloatComparison(expr, calc);
+    const calc = calculateExpression(expr, referenceContext);
+    const floatApprox = computeFloatComparison(expr, calc, referenceContext);
     const expectedLimit = isExpectedLimit(coord, raw, calc);
     const resultObj = {
       ...calc,
       raw,
-      resolvedExpr: expr,
+      resolvedExpr: readableResolvedExpression(expr, referenceContext),
       floatApprox,
       expectedLimit,
       display: formatCellDisplay(calc, floatApprox)
@@ -331,10 +589,13 @@ function evaluateCell(coord, visiting = new Set()) {
       kind: 'error',
       raw,
       resolvedExpr: expr,
-      status: 'unsupported',
-      text: err.message,
+      status: err.code === 'DIVISION_BY_ZERO' ? 'error' : 'unsupported',
+      code: err.code || 'CELL_ERROR',
+      exact: false,
+      text: err.code === 'DIVISION_BY_ZERO' ? 'undefined' : err.message,
       display: expr
     };
+    errRes.expectedLimit = isExpectedLimit(coord, raw, errRes);
     evaluatedCells.set(coord, errRes);
     return errRes;
   }
@@ -342,19 +603,28 @@ function evaluateCell(coord, visiting = new Set()) {
 
 // Expand ranges and single references; parseCoord validates against COLS and ROWS.
 function expandMacrosAndCellRefs(expr, visiting, context) {
-  let out = expr.replace(/\b(SUM|AVG|PROD)\s*\(\s*([A-Z]\d+)\s*:\s*([A-Z]\d+)\s*\)/gi, (_, fn, c1, c2) => {
+  const functions = AliceSheet.expandFunctions(expr,
+    arg => calculateExpression(expandMacrosAndCellRefs(arg, visiting, context), context),
+    value => canonicalToken(value, context), AliceMath.Q);
+  let out = functions.replace(/\b(SUM|AVG|AVERAGE|PROD|PRODUCT)\s*\(\s*(\$?[A-Z]\$?\d+)\s*:\s*(\$?[A-Z]\$?\d+)\s*\)/gi, (_, fn, c1, c2) => {
     const coords = expandRange(c1, c2);
     if (!coords.length) throw new Error('Invalid cell range.');
-    const tokens = coords.map(c => {
-      const ev = evaluateCell(c, new Set(visiting));
-      return canonicalToken(ev, context);
-    });
-    const op = fn.toUpperCase() === 'PROD' ? ' * ' : ' + ';
-    const joined = `(${tokens.join(op)})`;
-    return fn.toUpperCase() === 'AVG' ? `(${joined} /${coords.length})` : joined;
+    const values = coords.map(c => evaluateCell(c, new Set(visiting))).filter(v => v.kind !== 'empty' && v.kind !== 'label');
+    const result = AliceApprox.aggregate(values, fn, { enabled: calculationMode === 'approximate', precision: decimalPrecision });
+    if (result.status !== 'result') throw AliceMath.Syntax.error(result.code || 'AGGREGATE_ERROR', result.text);
+    if(result.approximate)return canonicalToken(result,context);
+    const name=referenceAlias(new AliceMath.V(result.rational,new AliceMath.Q(0),result.dim),context);
+    if(values.every(v=>!v.dim?.some(d=>d!==0))){
+      const floats=values.map(v=>rationalToFloat(v.baseRational||v.rational));
+      const product=/^(PROD|PRODUCT)$/i.test(fn),mean=/^(AVG|AVERAGE)$/i.test(fn);
+      let value=floats.length?floats.slice(1).reduce((a,b)=>product?a*b:a+b,floats[0]):0;
+      if(mean)value/=floats.length;
+      context.floatValues[name]=value;
+    }
+    return '('+name+'/1)';
   });
 
-  out = out.replace(/\b([A-Z]\d+)\b/gi, match => {
+  out = out.replace(/(?<![a-z0-9_])(\$?[A-Z]\$?\d+)\b/gi, match => {
     const parsed = parseCoord(match);
     if (!parsed) throw new Error('Invalid cell coordinate: ' + match);
     const norm = parsed.coord;
@@ -387,29 +657,28 @@ function isExpectedLimit(coord, raw, calc) {
   const row = SCENARIO_WORKBOOKS[selectedTemplate]?.rows[(parsed?.rowIdx ?? 0) - 1];
   if (!row || parsed.colIdx !== 3 || raw !== row[3]) return false;
   if (calc.status === 'unsupported') return row[6] === 'Unsupported expression' || row[6] === calc.text;
-  return row[6] === 'undefined' && calc.text === 'undefined';
+  return row[6] === 'undefined' && calc.code === 'DIVISION_BY_ZERO';
 }
 
-function computeFloatComparison(resolvedExpr, calc) {
-  if (!calc || !calc.rational) return null;
+function computeFloatComparison(resolvedExpr, calc, context) {
+  if (!calc || !calc.rational || calc.approximate) return null;
   const q = calc.rational;
   const exactFloat = rationalToFloat(q);
   // Also simulate naive JS IEEE-754 evaluation on simple arithmetic to expose classic 0.1 + 0.2 drift
   let naiveFloat = exactFloat;
   try {
-    const clean = resolvedExpr.replace(/[^0-9+\-*/^().\s]/g, '');
-    if (clean && clean === resolvedExpr) {
-      // Compute binary float step-by-step using AliceMath tokens without eval
-      const p = new AliceMath.Parser(clean, {});
-      naiveFloat = evalFloatTokens(p.tokens);
-      if (Number.isNaN(naiveFloat)) naiveFloat = exactFloat;
+    const values=context?.floatValues||{};
+    const tokens=AliceMath.Syntax.lex(resolvedExpr);
+    if(tokens.length&&tokens.every(t=>/^(?:(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|[+*/^().-])$/i.test(t)||Object.hasOwn(values,t))) {
+      naiveFloat=evalFloatTokens(tokens,values);
+      if(Number.isNaN(naiveFloat))naiveFloat=exactFloat;
     }
   } catch (_) {}
   return { exactFloat, naiveFloat };
 }
 
 // Safe token-based float evaluator (no eval) to demonstrate IEEE-754 drift vs BigInt Q
-function evalFloatTokens(tokens) {
+function evalFloatTokens(tokens, values = {}) {
   let i = 0;
   function parseExpr(minBp = 0) {
     let t = tokens[i++];
@@ -421,7 +690,7 @@ function evalFloatTokens(tokens) {
       lhs = parseExpr(0);
       i++; // ')'
     } else {
-      lhs = parseFloat(t);
+      lhs = Object.hasOwn(values,t) ? values[t] : parseFloat(t);
     }
     while (i < tokens.length) {
       const op = tokens[i];
@@ -522,7 +791,8 @@ function buildGridDOM() {
       const td = document.createElement('td');
       td.className = 'sheet-cell';
       td.dataset.coord = coord;
-      td.onclick = () => selectCell(coord);
+      td.onmousedown = e => { if (e.shiftKey) e.preventDefault(); };
+      td.onclick = e => selectCell(coord, e.shiftKey);
       td.ondblclick = () => startInlineEdit(coord, td);
       tr.append(td);
     }
@@ -537,7 +807,7 @@ function renderGridValues() {
   cells.forEach(td => {
     const coord = td.dataset.coord;
     const ev = evaluatedCells.get(coord);
-    td.className = 'sheet-cell' + (coord === selectedCoord ? ' selected' : '');
+    td.className = 'sheet-cell' + (coord === selectedCoord ? ' selected' : '') + (selectionRange?.includes(coord) ? ' in-selection' : '');
     if (!ev || ev.kind === 'empty') {
       td.textContent = '';
       td.removeAttribute('title');
@@ -547,7 +817,7 @@ function renderGridValues() {
     content.className = 'cell-content';
     content.textContent = ev.display;
     td.replaceChildren(content);
-    td.title = ev.raw !== ev.display ? `${ev.raw} →${ev.display}` : ev.display;
+    td.title = (ev.approximate ? `Approximate · ${ev.precision} significant digits · ` : '') + (ev.raw !== ev.display ? `${ev.raw} →${ev.display}` : ev.display);
     const issue = getCalculationIssue(ev);
     if (issue) {
       td.removeAttribute('title');
@@ -577,6 +847,7 @@ function renderGridValues() {
     else if (ev.status === 'unsupported' || ev.kind === 'error') td.classList.add('is-err');
     else if (issue) td.classList.add('is-err');
     else if (ev.kind === 'label') td.classList.add('is-label');
+    else if (ev.approximate) td.classList.add('is-approx');
     else if (ev.kind === 'equation') td.classList.add('is-eq');
     else if (ev.unitLabel) td.classList.add('is-unit');
     else td.classList.add('is-num');
@@ -649,21 +920,35 @@ function scheduleCommentClose() {
   }, 250);
 }
 
-function selectCell(coord) {
-  selectedCoord = coord;
-  activeCellBadge.textContent = coord;
-  formulaInput.value = rawCells.get(coord) || '';
+function selectCell(coord, extend = false) {
+  if (extend) selectionRange = expandRange(selectedCoord, coord);
+  else { selectedCoord = coord; selectionRange = null; }
+  activeCellBadge.textContent = selectedCoord;
+  formulaInput.value = rawCells.get(selectedCoord) || '';
   renderGridValues();
-  updateInspector(coord);
+  updateInspector(selectedCoord);
 }
 
 function commitCellValue(coord, val) {
-  const trimmed = val.trim();
-  if (trimmed) rawCells.set(coord, trimmed);
-  else rawCells.delete(coord);
-  recalculateAll();
-  captureCurrentCustomWorkbook();
-  persistCustomWorkbooks();
+  const trimmed = val.startsWith("'") ? val : val.trim();
+  if (trimmed.length > AliceWorkbookIO.MAX_TEXT) { updateHistoryControls('Cell text must have at most 2000 characters.'); return false; }
+  try {
+    return changeWorkbook('Edit ' + coord, () => {
+      if (trimmed) rawCells.set(coord, trimmed); else rawCells.delete(coord);
+      importIssues.delete(coord);
+    });
+  } catch (error) { updateHistoryControls(error.message); return false; }
+}
+
+function fillDown(source, throughRow) {
+  const plan = AliceSheet.planFill(rawCells, importIssues, source, throughRow, { cols: COLS, rows: ROWS });
+  changeWorkbook('Fill ' + plan.range, () => {
+    for (const change of plan.changes) {
+      if (change.raw) rawCells.set(change.coord, change.raw); else rawCells.delete(change.coord);
+      if (change.issue) importIssues.set(change.coord, change.issue); else importIssues.delete(change.coord);
+    }
+  });
+  return plan;
 }
 
 function startInlineEdit(coord, td) {
@@ -719,6 +1004,8 @@ function updateInspector(coord) {
   const statusEl = document.querySelector('#inspector-status');
 
   if (!ev || ev.kind === 'empty') {
+    document.querySelector('#insp-output-label').textContent = 'Exact Output';
+    document.querySelector('#insp-precision-label').textContent = 'BigInt Bit-Length';
     statusEl.textContent = 'Empty';
     statusEl.className = 'badge';
     document.querySelector('#insp-raw').textContent = '—';
@@ -732,8 +1019,10 @@ function updateInspector(coord) {
   }
 
   const issue = getCalculationIssue(ev);
-  statusEl.textContent = issue ? issue.title : ev.status || ev.kind;
-  statusEl.className = 'badge ' + (ev.expectedLimit || issue?.title === 'Float64 limit' ? 'warn' : issue ? 'err' : ev.status === 'result' ? 'good' : ev.kind === 'label' ? '' : 'err');
+  statusEl.textContent = issue ? issue.title : ev.approximate ? `Approximate · ${ev.precision} digits` : ev.status || ev.kind;
+  document.querySelector('#insp-output-label').textContent = ev.approximate ? 'Approximate Output' : 'Exact Output';
+  document.querySelector('#insp-precision-label').textContent = ev.approximate ? 'Decimal Precision' : 'BigInt Bit-Length';
+  statusEl.className = 'badge ' + (ev.approximate ? 'warn' : ev.expectedLimit || issue?.title === 'Float64 limit' ? 'warn' : issue ? 'err' : ev.status === 'result' ? 'good' : ev.kind === 'label' ? '' : 'err');
   document.querySelector('#insp-raw').textContent = ev.raw || '—';
   document.querySelector('#insp-resolved').textContent = ev.resolvedExpr || ev.raw || '—';
   document.querySelector('#insp-output').textContent = ev.text || ev.display || '—';
@@ -745,8 +1034,8 @@ function updateInspector(coord) {
     const dBits = q.d.toString(2).length;
     document.querySelector('#insp-bits').textContent = `${nBits}b num / ${dBits}b den (limit 4096b)`;
   } else {
-    document.querySelector('#insp-fraction').textContent = '—';
-    document.querySelector('#insp-bits').textContent = '—';
+    document.querySelector('#insp-fraction').textContent = ev.approximate ? 'Not an exact fraction' : '—';
+    document.querySelector('#insp-bits').textContent = ev.approximate ? `${ev.precision} significant digits · decimal rounding, not an error bound` : '—';
   }
 
   const dim = ev.dim || [0, 0, 0];
@@ -769,7 +1058,7 @@ function updateWorkbookGuide(coord) {
   document.querySelector('#workbook-sources').hidden = !!custom;
   if (custom) {
     document.querySelector('#workbook-title').textContent = custom.name;
-    document.querySelector('#workbook-summary').textContent = workbookStorageError ? 'Your workbook is kept for this session. Export JSON to keep a copy.' : 'Your workbook is saved in this browser. Export JSON to keep a portable copy.';
+    document.querySelector('#workbook-summary').textContent = workbookConflicts.has(selectedTemplate) ? 'Another tab changed the saved version. Your local cells and draft are retained; load the saved version or save a conflict copy.' : workbookStorageError ? 'Your workbook is kept for this session. Export JSON to keep a copy.' : workbookSaving || dirtyWorkbooks.has(selectedTemplate) ? 'Changes are waiting to save. Keep this tab open until the save completes, or export JSON.' : 'Your workbook is saved in this browser. Export JSON to keep a portable copy.';
     document.querySelector('#workbook-example').textContent = 'Enter numbers, = formulas, fractions, unit expressions, or a linear equation. Cell references stay within this workbook.';
     document.querySelector('#workbook-expected').textContent = '';
     return;
@@ -779,7 +1068,7 @@ function updateWorkbookGuide(coord) {
   document.querySelector('#workbook-summary').textContent = workbook.summary;
   const row = workbook.rows[(parseCoord(coord)?.rowIdx ?? 0) - 1];
   document.querySelector('#workbook-example').textContent = row ? row[0] + ': ' + row[5] : 'Select a result or guard cell to inspect its formula and exact rational output.';
-  document.querySelector('#workbook-expected').textContent = row ? 'Template result (Exact Auto): ' + (row[7] || row[6]) : '';
+  document.querySelector('#workbook-expected').textContent = row ? 'Template result (Exact only): ' + (row[7] || row[6]) : '';
   const links = document.querySelector('#workbook-sources');
   links.replaceChildren();
   const sources = workbook.sources || [];
@@ -801,9 +1090,9 @@ function evaluateOmniboxText(rawText) {
     const expr = trimmed.replace(/^=/, '');
     const referenceContext = createReferenceContext(expr);
     const expanded = expandMacrosAndCellRefs(expr, new Set(), referenceContext);
-    return { expanded, res: AliceMath.calculate(expanded, unitsRegistry, referenceContext.values) };
+    return { expanded: readableResolvedExpression(expanded, referenceContext), res: calculateExpression(expanded, referenceContext) };
   } catch (e) {
-    return { expanded: trimmed, res: { status: 'unsupported', text: e.message } };
+    return { expanded: trimmed, res: { status: e.code === 'DIVISION_BY_ZERO' ? 'error' : 'unsupported', code: e.code || 'CELL_ERROR', exact: false, text: e.message } };
   }
 }
 
@@ -848,7 +1137,60 @@ function renderUnitsRegistry() {
   });
 }
 
+function exportWorkbookData() {
+  return {
+    schema: 'alice.grid-workbook/v1',
+    name: customWorkbooks.get(selectedTemplate)?.name || SCENARIO_WORKBOOKS[selectedTemplate]?.title || document.querySelector('#template-select').selectedOptions[0].textContent,
+    calculation: calculationSettings(),
+    units: customUnitDefinitions(),
+    importIssues: Object.fromEntries(importIssues),
+    cells: Object.fromEntries(rawCells),
+    evaluated: Object.fromEntries([...evaluatedCells.entries()].filter(([, v]) => v.kind !== 'empty').map(([k, v]) => [k, {
+      raw: v.raw, output: v.text || v.display, status: v.status, ...(v.code ? {code:v.code} : {}), exact: v.exact === true,
+      ...(v.approximate ? { approximate: true, precision: v.precision, approximateValue: v.approximateValue,
+        baseApproximateValue: v.baseApproximateValue, dim: v.dim, unitLabel: v.unitLabel,
+        rounding: v.rounding, workingPrecision: v.workingPrecision } : {})
+    }]))
+  };
+}
+
 // Event Listeners & Shortcuts
+window.addEventListener('storage',handleWorkbookStorageEvent);
+window.addEventListener('beforeunload',e=>{if(workbookSaving||[...dirtyWorkbooks].some(id=>customWorkbooks.has(id)&&JSON.stringify(workbookRecord(customWorkbooks.get(id)))!==savedWorkbookJSON.get(id))){e.preventDefault();e.returnValue='';}});
+window.addEventListener('pagehide',()=>{captureCurrentCustomWorkbook();flushWorkbookSaves();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){captureCurrentCustomWorkbook();flushWorkbookSaves();}});
+document.querySelector('#retry-workbook-save').onclick=()=>{captureCurrentCustomWorkbook();flushWorkbookSaves();};
+document.querySelector('#save-conflict-copy').onclick=async()=>{try{await saveConflictCopy();}catch(e){workbookStorageError=e.message;updateWorkbookStorageStatus();}};
+document.querySelector('#load-shared-version').onclick=()=>document.querySelector('#storage-reload-dialog').showModal();
+document.querySelector('#cancel-storage-reload').onclick=()=>document.querySelector('#storage-reload-dialog').close();
+document.querySelector('#confirm-storage-reload').onclick=async()=>{try{await loadSharedWorkbook();document.querySelector('#storage-reload-dialog').close();}catch(e){document.querySelector('#storage-reload-error').textContent=e.message;}};
+document.querySelector('#rename-legacy-unit').onclick=()=>{
+  const select=document.querySelector('#legacy-unit-name');select.replaceChildren();
+  for(const name of legacyUnitNames()){const option=document.createElement('option');option.value=name;option.textContent=name;select.append(option);}
+  document.querySelector('#legacy-unit-new-name').value='';document.querySelector('#legacy-unit-error').textContent='';document.querySelector('#legacy-unit-dialog').showModal();
+};
+document.querySelector('#cancel-legacy-unit').onclick=()=>document.querySelector('#legacy-unit-dialog').close();
+document.querySelector('#legacy-unit-form').onsubmit=e=>{e.preventDefault();try{renameLegacyUnit(document.querySelector('#legacy-unit-name').value,document.querySelector('#legacy-unit-new-name').value);document.querySelector('#legacy-unit-dialog').close();updateWorkbookStorageStatus();}catch(error){document.querySelector('#legacy-unit-error').textContent=error.message;}};
+
+document.querySelector('#calculation-mode').onchange = e => {
+  changeWorkbook('Change calculation mode', () => { calculationMode = e.target.value === 'approximate' ? 'approximate' : 'exact'; });
+};
+document.querySelector('#decimal-precision').onchange = e => {
+  const chosen = Number(e.target.value);
+  if (AliceApprox.PRECISIONS.includes(chosen)) changeWorkbook('Change decimal precision', () => { decimalPrecision = chosen; });
+};
+document.querySelector('#undo-workbook').onclick = () => undoWorkbook();
+document.querySelector('#redo-workbook').onclick = () => undoWorkbook(true);
+document.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || document.querySelector('dialog[open]')) return;
+  const key = e.key.toLowerCase();
+  if (key !== 'z' && key !== 'y') return;
+  const active = document.activeElement;
+  if (active?.matches('input, textarea, [contenteditable="true"]')) {
+    if (active !== formulaInput || formulaInput.value.trim() !== (rawCells.get(selectedCoord) || '')) return;
+  }
+  e.preventDefault(); e.stopImmediatePropagation(); undoWorkbook(key === 'y' || e.shiftKey);
+}, true);
 document.querySelector('#delete-workbook').onclick = () => {
   const book = customWorkbooks.get(selectedTemplate);
   if (!book) return;
@@ -865,10 +1207,10 @@ document.querySelector('#delete-workbook-dialog').addEventListener('close', () =
   const button = document.querySelector('#delete-workbook');
   (button.hidden ? document.querySelector('#template-select') : button).focus();
 });
-document.querySelector('#delete-workbook-form').addEventListener('submit', e => {
+document.querySelector('#delete-workbook-form').addEventListener('submit', async e => {
   e.preventDefault();
   try {
-    deleteCustomWorkbook(pendingDeleteWorkbookId);
+    await deleteCustomWorkbook(pendingDeleteWorkbookId);
     document.querySelector('#delete-workbook-dialog').close();
   } catch (err) {
     const error = document.querySelector('#delete-workbook-error');
@@ -963,11 +1305,8 @@ document.querySelectorAll('.display-mode-group .chip').forEach(btn => {
 // Workbook Selector
 document.querySelector('#template-select').onchange = e => loadTemplate(e.target.value);
 document.querySelector('#clear-sheet').onclick = () => {
-  rawCells.clear();
-  recalculateAll();
+  changeWorkbook('Clear Grid', () => { rawCells.clear(); importIssues.clear(); selectedCoord = 'A1'; });
   selectCell('A1');
-  captureCurrentCustomWorkbook();
-  persistCustomWorkbooks();
 };
 
 // Custom Unit Registration
@@ -979,22 +1318,20 @@ document.querySelector('#add-unit-btn').onclick = () => {
     alert('Unit name must contain lowercase letters only (a-z).');
     return;
   }
-  if (name === 'x' || name === 'sqrt') {
+  if (AliceMath.Syntax.RESERVED.includes(name)) {
     alert('This name is reserved for the variable or a math function.');
     return;
   }
   try {
-    AliceMath.Q.read(scale);
     const dim = dimRaw.split(',').map(s => Number(s.trim()));
     if (dim.length !== 3 || dim.some(n => !Number.isInteger(n) || Math.abs(n) > 10)) {
       throw new Error('Dimensions must be 3 integers between -10 and 10.');
     }
-    unitsRegistry[name] = [scale, dim];
-    renderUnitsRegistry();
-    recalculateAll();
+    AliceWorkbookIO.validateUnits({ [name]: [scale, dim] });
+    if (!Object.hasOwn(unitsRegistry,name) && Object.keys(customUnitDefinitions()).length >= 100) throw new Error('Use at most 100 custom units per workbook.');
+    changeWorkbook('Define unit ' + name, () => { unitsRegistry[name] = [scale, dim]; });
     document.querySelector('#new-unit-name').value = '';
     document.querySelector('#new-unit-scale').value = '';
-    persistCustomWorkbooks();
   } catch (e) {
     alert('Invalid unit definition: ' + e.message);
   }
@@ -1011,30 +1348,12 @@ function downloadBlob(filename, content, mime) {
 }
 
 document.querySelector('#export-csv').onclick = () => {
-  const rows = [];
-  for (let r = 1; r <= ROWS; r++) {
-    const line = COLS.map(c => {
-      const ev = evaluatedCells.get(c + r);
-      const val = ev?.display || '';
-      return `"${String(val).replace(/"/g, '""')}"`;
-    });
-    rows.push(line.join(','));
-  }
-  downloadBlob('alice-grid-export.csv', rows.join('\n'), 'text/csv');
+  const formulas = document.querySelector('#csv-export-mode').value === 'formulas';
+  downloadBlob(formulas ? 'alice-grid-formulas.csv' : 'alice-grid-values.csv', AliceWorkbookIO.exportCSV(rawCells, evaluatedCells, {cols:COLS, rows:ROWS}, formulas), 'text/csv');
 };
 
 document.querySelector('#export-json').onclick = () => {
-  const dump = {
-    schema: 'alice.grid-workbook/v1',
-    name: customWorkbooks.get(selectedTemplate)?.name || SCENARIO_WORKBOOKS[selectedTemplate]?.title || document.querySelector('#template-select').selectedOptions[0].textContent,
-    units: customUnitDefinitions(),
-    cells: Object.fromEntries(rawCells),
-    evaluated: Object.fromEntries(
-      [...evaluatedCells.entries()]
-        .filter(([, v]) => v.kind !== 'empty')
-        .map(([k, v]) => [k, { raw: v.raw, output: v.text || v.display, status: v.status }])
-    )
-  };
+  const dump = exportWorkbookData();
   downloadBlob('alice-grid-workbook.json', JSON.stringify(dump, null, 2), 'application/json');
 };
 

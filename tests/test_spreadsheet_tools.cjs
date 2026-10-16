@@ -1,0 +1,44 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const root=path.resolve(process.argv[2]||path.join(__dirname,'..'));
+const AliceMath=require(path.join(root,'alice-math.min.js')),AliceApprox=require(path.join(root,'alice-approx.js')),AliceHistory=require(path.join(root,'workbook-history.js')),AliceWorkbookIO=require(path.join(root,'workbook-io.js')),AliceSheet=require(path.join(root,'spreadsheet-tools.js'));
+const memory=new Map(),document={querySelector:()=>({classList:{toggle(){}},replaceChildren(){},append(){}})};
+const AliceWorkbookStorage=require(path.join(root,'workbook-storage.js'));
+const context=vm.createContext({AliceWorkbookStorage,AliceMath,AliceApprox,AliceHistory,AliceWorkbookIO,AliceSheet,document,navigator:{locks:{request:async(_,fn)=>fn()}},localStorage:{get length(){return memory.size},key:i=>[...memory.keys()][i]||null,getItem:k=>memory.get(k)??null,setItem:(k,v)=>memory.set(k,v)}});
+vm.runInContext(fs.readFileSync(path.join(root,'workbooks.js'),'utf8'),context);
+const controller=fs.readFileSync(path.join(root,'app.js'),'utf8').split('// Event Listeners & Shortcuts')[0];
+vm.runInContext(controller,context);
+vm.runInContext(`appendCustomWorkbookOption=()=>{};renderUnitsRegistry=()=>{};recalculateAll=()=>{evaluatedCells.clear();for(const c of rawCells.keys())evaluateCell(c);};selectCell=c=>{selectedCoord=c;};`,context);
+const run=s=>vm.runInContext(s,context);let total=0;const failures=[];
+function check(name,fn){total++;try{fn();}catch(e){failures.push({name,error:e.message});}}
+function calc(expr,cells={}){context.sample={...cells,Z26:'='+expr};return run(`rawCells=new Map(Object.entries(sample));evaluatedCells.clear();evaluateCell('Z26')`);}
+for(const[e,n,d]of [
+ ['ROUND(1.005,2)',101n,100n],['ROUND(-1.005,2)',-101n,100n],['ROUND(1/3,10)',3333333333n,10000000000n],['ROUND(250,-2)',300n,1n],['ROUND(-250,-2)',-300n,1n],['ROUND(0)',0n,1n],['ROUND(1.5)',2n,1n],['ROUND(-1.5)',-2n,1n],['ROUND(ROUND(1.2345,3),2)',31n,25n],['FLOOR(-1/3)',-1n,1n],['FLOOR(-2)',-2n,1n],['FLOOR(1/3)',0n,1n],['GCD(84,-30)',6n,1n],['GCD(0,0)',0n,1n],['GCD(-97)',97n,1n],['LCM(17,19,23)',7429n,1n],['LCM(0,0)',0n,1n],['LCM(-6,9)',18n,1n],['GCD(9007199254740993,3)',3n,1n],['ROUND(1/3,100)',BigInt('3'.repeat(100)),10n**100n]
+])check(e,()=>{const r=calc(e);assert.equal(r.status,'result',r.text);assert.equal(r.rational.n,n);assert.equal(r.rational.d,d);assert.equal(r.exact,true);});
+for(const[e,reason]of [
+ ['ROUND(1,101)','-100 to 100'],['ROUND(1,-101)','-100 to 100'],['ROUND(1,1/2)','integer'],['ROUND()','nonempty'],['ROUND(1,2,3)','accepts'],['ROUND(1,)','nonempty'],['ROUND(1,2','Missing closing'],['FLOOR(1,2)','one value'],['FLOOR(1 m)','dimensionless'],['ROUND(1 m,2)','dimensionless'],['GCD(1/2,2)','integers'],['LCM(1/2,2)','integers'],['LCM('+Array(33).fill('1').join(',')+')','1 to 32'],['ROUND(1/0,2)','undefined'],['ROUND(x,2)','exact rational'],['ROUND('.repeat(34)+'1'+')'.repeat(34),'nesting'],['LCM((((2^10)^10)^10)^2,(((3^10)^10)^10)^2)','Numeric budget']
+])check('guard '+e.slice(0,55),()=>{const r=calc(e);assert.equal(r.status,e==='ROUND(1/0,2)'?'error':'unsupported');assert.match(r.text,new RegExp(reason));assert(run(`getCalculationIssue(evaluateCell('Z26'))`));});
+check('nested range inside ROUND and mixed-case names',()=>{const r=calc('round(average($A$1:A2),2)',{A1:'=1/3',A2:'=2/3'});assert.equal(r.text,'0.5');});
+check('AVERAGE retains compatible dimensions',()=>{const r=calc('AVERAGE(A1:B1)',{A1:'=1 m',B1:'=200 cm'});assert.equal(r.text,'1.5 m');});
+check('PRODUCT alias with absolute endpoints',()=>{const r=calc('PRODUCT($A$1:$A2)',{A1:'=3',A2:'=7'});assert.equal(r.rational.n,21n);});
+check('blank aggregate cells are skipped',()=>{assert.equal(calc('AVERAGE(A1:A2)',{A1:'=1'}).rational.n,1n);});
+check('absolute references normalize and cycles are detected',()=>{assert.equal(calc('$A$1+A$2',{A1:'=1',A2:'=2'}).rational.n,3n);assert.match(calc('GCD(A1,2)',{A1:'=ROUND(Z$26)'}).text,/Circular/);});
+check('approximate input is never labelled exact by rounding',()=>{run(`calculationMode='approximate'`);const r=calc('ROUND(sqrt(2),2)');assert.equal(r.status,'unsupported');assert.match(r.text,/exact rational/);assert.equal(r.rational,undefined);run(`calculationMode='exact'`);});
+check('range aliases preserve approximate provenance',()=>{run(`calculationMode='approximate'`);const r=calc('AVERAGE(A1:A2)',{A1:'=sqrt(2)',A2:'=sqrt(2)'});assert.equal(r.approximate,true);assert.equal(r.rational,undefined);run(`calculationMode='exact'`);});
+check('declared helper boundaries are amber while edited errors stay unexpected',()=>{run(`selectedTemplate='functions';rawCells=new Map(Object.entries(WORKBOOK_TEMPLATES.functions));evaluatedCells.clear();`);assert.equal(run(`evaluateCell('D15').expectedLimit`),true);run(`rawCells.set('D15','=ROUND(B15,1)');evaluatedCells.clear();`);assert.equal(run(`evaluateCell('D15').expectedLimit`),false);});
+const options={cols:'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),rows:26};
+for(const[raw,dr,dc,expected]of [
+ ['=A1+$A1+A$1+$A$1',2,1,'=B3+$A3+B$1+$A$1'],['=AVERAGE($A1:B$2)',1,0,'=AVERAGE($A2:B$2)'],["'=A1",3,0,"'=A1"],['A1 is a label',3,0,'A1 is a label'],['=1e2+A1',2,0,'=1e2+A3'],['=ROUND(a01*$b$2,2)',1,0,'=ROUND(A2*$B$2,2)']
+])check('shift '+raw,()=>assert.equal(AliceSheet.shiftFormula(raw,dr,dc,options),expected));
+check('fill rejects out-of-grid moves atomically',()=>{run(`rawCells=new Map([['A1','=Z26'],['A2','=123']]);importIssues.clear();const preFill=JSON.stringify([...rawCells]);`);assert.throws(()=>run(`fillDown('A1',3)`),/outside/);assert.equal(run(`JSON.stringify([...rawCells])`),run('preFill'));});
+check('multi-row fill repeats original pattern without cascading',()=>{const cells=new Map([['A1','=B1'],['A2','=B2*2']]);const p=AliceSheet.planFill(cells,new Map(),'A2:A1',6,options);assert.deepEqual(p.changes.map(c=>c.raw),['=B3','=B4*2','=B5','=B6*2']);assert.equal(cells.size,2);});
+check('fill copies import comments and blank sources clear destinations',()=>{const p=AliceSheet.planFill(new Map([['A1','=LOG(B1)'],['B2','old']]),new Map([['A1',{raw:'=LOG(B1)',reason:'log base'}]]),'A1:B1',2,options);assert.equal(p.overwrites,1);assert.deepEqual(p.changes[0].issue,{raw:'=LOG(B2)',reason:'log base'});assert.equal(p.changes[1].raw,'');});
+check('fill is one undo step and redo restores shifted formulas',()=>{run(`createCustomWorkbook('Fill checks');commitCellValue('A1','=ROUND(B1*$C$1,2)');commitCellValue('B1','=1.005');commitCellValue('C1','=2');commitCellValue('B2','=2.005');commitCellValue('B3','=3.005');fillDown('A1',3);`);assert.equal(run(`evaluateCell('A3').text`),'6.01');run('undoWorkbook()');assert.equal(run(`rawCells.has('A2')`),false);assert.equal(run(`rawCells.has('A3')`),false);run('undoWorkbook(true)');assert.equal(run(`rawCells.get('A3')`),'=ROUND(B3*$C$1,2)');});
+for(const[source,end]of [['A26',26],['A1',1],['A1',27],['A0',3],['A1:B1:C1',3],['A1',2.5]])check('fill validates '+source+' '+end,()=>assert.throws(()=>AliceSheet.planFill(new Map(),new Map(),source,end,options)));
+check('absolute references and ranges scale to row 1200',()=>{const scaled=vm.createContext({AliceWorkbookStorage,AliceSheet,AliceMath,AliceApprox,AliceHistory,AliceWorkbookIO,document});vm.runInContext(fs.readFileSync(path.join(root,'workbooks.js'),'utf8'),scaled);vm.runInContext(controller.replace('const ROWS = 26;','const ROWS = 1200;'),scaled);const r=vm.runInContext(`rawCells=new Map([['B1199','=1/3'],['B1200','=2/3'],['A1','=ROUND(AVERAGE($B$1199:B$1200),2)']]);evaluateCell('A1')`,scaled);assert.equal(r.text,'0.5');});
+function luminance(hex){const rgb=hex.slice(1).match(/../g).map(h=>parseInt(h,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;}
+function contrast(a,b){const x=luminance(a),y=luminance(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05);}
+for(const[name,p]of Object.entries(AliceSheet.ACCENTS))check('palette contrast '+name,()=>{assert(contrast('#ffffff',p.primary)>=4.5);assert(contrast(p.dark,p.pale)>=4.5);assert(contrast('#2e293a',p.selected)>=4.5);assert(contrast(p.dark,p.selected)>=4.5);});
+check('accent preference persists independently of workbook data',()=>{const s={getItem:k=>memory.get(k),setItem:(k,v)=>memory.set(k,v)};assert.equal(AliceSheet.readAccent(s),'purple');assert(AliceSheet.saveAccent(s,'teal'));assert.equal(AliceSheet.readAccent(s),'teal');memory.set(AliceSheet.ACCENT_KEY,'bad');assert.equal(AliceSheet.readAccent(s),'purple');});
+check('blocked storage defaults safely without throwing',()=>{const s={getItem(){throw Error('blocked')},setItem(){throw Error('blocked')}};assert.equal(AliceSheet.readAccent(s),'purple');assert.equal(AliceSheet.saveAccent(s,'ocean'),false);});
+console.log(JSON.stringify({total,passed:total-failures.length,failures},null,2));process.exitCode=failures.length?1:0;

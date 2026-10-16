@@ -1,0 +1,23 @@
+{
+  "schema": "alice.reference-results/v1",
+  "seed": 20261016,
+  "total": 1128,
+  "passed": 1128,
+  "groups": {
+    "arithmetic": 500,
+    "powers": 100,
+    "linear": 100,
+    "roots": 100,
+    "conversion": 100,
+    "decimals": 100,
+    "dimensions": 100,
+    "large": 4,
+    "regressions": 24
+  },
+  "datasetSha256": "86b6b86af82f4e9677a18271ac333db40d90d9de19d582eefc03a59fb27254bd",
+  "engineSha256": "c4b71f8773097f869f79c2e1bf5d3bbe5242b9841d12b7ff589cef78314ddbb6",
+  "node": "v25.9.0",
+  "python": "3.14.8",
+  "generatedAt": "2026-10-15T20:31:38.955875+00:00",
+  "failures": []
+}

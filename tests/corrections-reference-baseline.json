@@ -1,0 +1,7 @@
+{
+  "total": 395,
+  "passed": 395,
+  "failures": [],
+  "seed": 61017,
+  "oracles": "Python Fraction, Decimal.log10/ROUND_HALF_UP, math.gcd/lcm"
+}

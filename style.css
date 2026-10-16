@@ -81,7 +81,7 @@ body {
   border: 1.5px solid var(--purple);
   border-radius: 12px;
   padding: 5px 10px;
-  box-shadow: 0 2px 10px rgba(119, 97, 199, 0.1);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--purple) 10%, transparent);
 }
 
 .omni-icon {
@@ -170,14 +170,14 @@ body {
   border-radius: 8px;
   padding: 6px 11px;
   font: 13.5px ui-monospace, SFMono-Regular, Consolas, monospace;
-  background: #fcfaff;
+  background: var(--bg);
   color: var(--ink);
   outline: none;
 }
 
 #formula-input:focus {
   border-color: var(--purple);
-  box-shadow: 0 0 0 2px rgba(119, 97, 199, 0.14);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--purple) 14%, transparent);
 }
 
 .display-mode-group {
@@ -309,7 +309,7 @@ body {
 .sheet-cell.is-label {
   color: var(--ink);
   font-weight: 600;
-  background: #faf8fe;
+  background: var(--bg);
 }
 
 .sheet-cell.selected {
@@ -525,3 +525,36 @@ button.danger { background: var(--err); color: #fff; border-color: var(--err); }
 
 .footer-github { display: inline-flex; align-items: center; gap: 6px; }
 .footer-github svg { flex-shrink: 0; }
+
+.calculation-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 18px; border-bottom: 1px solid var(--line); background: #fff; font-size: 12px; }
+.calculation-tools select { font-size: 12px; padding: 4px 8px; }
+.calculation-tools select:disabled { opacity: .55; cursor: default; }
+#calculation-mode-note { color: var(--muted); }
+.sheet-cell.is-approx { color: #7b4b00; background: #fff9eb; }
+
+button:disabled { opacity: .5; cursor: default; }
+#edit-history-status:empty { display: none; }
+#edit-history-status { color: var(--purple-dark); }
+.import-dialog { width: min(850px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
+.import-dialog label { margin-top: 10px; }
+.import-dialog select { max-width: 100%; }
+.import-dialog [hidden] { display: none; }
+.import-dialog .check-label { display: flex; gap: 8px; align-items: center; font-weight: 400; font-size: 12px; }
+.import-dialog input[type="checkbox"] { width: auto; }
+.import-preview-scroll { max-height: 240px; overflow: auto; border: 1px solid var(--line); }
+#import-preview { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+#import-preview td, #import-preview th { border: 1px solid var(--line); padding: 5px; overflow-wrap: anywhere; white-space: pre-wrap; max-height: 80px; }
+#import-preview th { background: var(--pale); }
+#import-preview .import-issue { background: var(--warn-bg); }
+#import-warnings { font-size: 12px; color: var(--muted); padding-left: 20px; }
+
+/* Palette colours are assigned as CSS variables by the accent picker. */
+.accent-control { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-left: auto; }
+#accent-swatch { width: 15px; height: 15px; border-radius: 50%; background: var(--purple); border: 1px solid var(--purple-dark); }
+#accent-status { color: var(--err); }
+.sheet-cell.in-selection { background: var(--cell-sel); box-shadow: inset 0 0 0 1px var(--line); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--purple-dark); outline-offset: 2px; }
+#fill-source { text-transform: uppercase; }
+#fill-preview { width: 100%; border-collapse: collapse; font-size: 12px; }
+#fill-preview td, #fill-preview th { border: 1px solid var(--line); padding: 5px 8px; text-align: left; overflow-wrap: anywhere; }
+#fill-preview td:last-child { font-family: ui-monospace, monospace; }

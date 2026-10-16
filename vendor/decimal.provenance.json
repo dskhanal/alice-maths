@@ -1,0 +1,8 @@
+{
+  "name": "decimal.js",
+  "version": "10.6.0",
+  "source": "https://registry.npmjs.org/decimal.js/-/decimal.js-10.6.0.tgz",
+  "integrity": "sha512-YpgQiITW3JXGntzdUmyUR1V812Hn8T1YVXhCu+wO3OpS4eU9l4YdD3qjyiKdV6mvV29zapkMeD390UVEf2lkUg==",
+  "sha256": "6e99821f8204c5f611b56077e3fce056a1562d22bc341a1f4af01afe7e527d83",
+  "license": "MIT"
+}

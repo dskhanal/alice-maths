@@ -41,6 +41,11 @@
       </select>
       <button id="new-workbook" class="btn-sm primary">New Workbook</button>
       <button id="delete-workbook" class="btn-sm" hidden>Delete Workbook</button>
+      <button id="import-workbook" class="btn-sm">Import</button>
+      <button id="undo-workbook" class="btn-sm" disabled>Undo</button>
+      <button id="redo-workbook" class="btn-sm" disabled>Redo</button>
+      <button id="fill-down" class="btn-sm" title="Fill formulas down with relative references (Cmd/Ctrl+D)">Fill Down</button>
+      <select id="csv-export-mode" aria-label="CSV export content"><option value="values">CSV values · safe text</option><option value="formulas">CSV raw formulas · executable</option></select>
       <button id="export-csv" class="btn-sm">Export CSV</button>
       <button id="export-json" class="btn-sm">Export JSON</button>
       <div class="clear-grid-tools">
@@ -50,6 +55,9 @@
           <button id="fit-cell-columns" class="chip" aria-pressed="false" title="Automatically fit column widths to their current content">Fit Columns</button>
         </div>
       </div>
+      <button id="retry-workbook-save" class="btn-sm" hidden>Retry Save</button>
+      <button id="load-shared-version" class="btn-sm" hidden>Load Saved Version</button>
+      <button id="save-conflict-copy" class="btn-sm" hidden>Save Conflict Copy</button>
       <span id="workbook-storage-status" class="workbook-storage-status" role="status"></span>
     </div>
   </header>
@@ -70,6 +78,16 @@
       <button class="chip" data-format="fraction">Strict Fraction (n/d)</button>
       <button class="chip" data-format="float">IEEE-754 Float Drift Diff</button>
     </div>
+  </section>
+
+  <section class="calculation-tools" aria-label="Calculation settings">
+    <label for="calculation-mode">Calculation</label>
+    <select id="calculation-mode"><option value="exact">Exact only</option><option value="approximate">Allow approximations ≈</option></select>
+    <label for="decimal-precision">Significant digits</label>
+    <select id="decimal-precision" disabled><option value="20">20</option><option value="34" selected>34</option><option value="50">50</option><option value="100">100</option></select>
+    <span id="edit-history-status" role="status"></span>
+    <span id="calculation-mode-note" role="status">Exact fractions; irrational results show a limit comment.</span>
+    <div class="accent-control"><span id="accent-swatch" aria-hidden="true"></span><label for="accent-select">Accent</label><select id="accent-select" aria-label="Colour accent"></select><span id="accent-status" role="status"></span></div>
   </section>
 
   <!-- Main Workspace -->
@@ -93,9 +111,9 @@
           <div class="kv-row"><span>Cell Coordinate</span><strong id="insp-coord">A1</strong></div>
           <div class="kv-row"><span>Raw Formula</span><code id="insp-raw">—</code></div>
           <div class="kv-row"><span>Resolved Expression</span><code id="insp-resolved">—</code></div>
-          <div class="kv-row"><span>Exact Output</span><strong id="insp-output" class="mono-val">—</strong></div>
+          <div class="kv-row"><span id="insp-output-label">Exact Output</span><strong id="insp-output" class="mono-val">—</strong></div>
           <div class="kv-row"><span>Rational Fraction (n / d)</span><code id="insp-fraction">—</code></div>
-          <div class="kv-row"><span>BigInt Bit-Length</span><code id="insp-bits">—</code></div>
+          <div class="kv-row"><span id="insp-precision-label">BigInt Bit-Length</span><code id="insp-bits">—</code></div>
           <div class="kv-row"><span>SI Dimensions [m, s, kg]</span><code id="insp-dim">[0, 0, 0] (dimensionless)</code></div>
           <div class="kv-row"><span>IEEE-754 Float64 Value</span><code id="insp-float">—</code></div>
         </div>
@@ -134,6 +152,7 @@
           <input id="new-unit-dim" type="text" placeholder="m,s,kg (e.g. 1,0,0)" value="1,0,0">
           <button id="add-unit-btn" class="btn-sm primary">Add</button>
         </div>
+        <button id="rename-legacy-unit" class="btn-sm" hidden>Rename Legacy Unit</button>
         <div id="unit-list" class="unit-list"></div>
       </div>
     </aside>
@@ -178,6 +197,57 @@
     </form>
   </dialog>
 
+  <dialog id="storage-reload-dialog" class="new-workbook-dialog" aria-labelledby="storage-reload-title">
+    <h2 id="storage-reload-title">Load Saved Version</h2>
+    <p>Replace this tab’s local cells and uncommitted input with the latest saved workbook? This clears its undo history. Export JSON or choose Save Conflict Copy to keep local edits.</p>
+    <p id="storage-reload-error" role="alert"></p>
+    <div class="new-workbook-actions"><button id="cancel-storage-reload">Cancel</button><button id="confirm-storage-reload" class="primary">Load Saved Version</button></div>
+  </dialog>
+  <dialog id="legacy-unit-dialog" class="new-workbook-dialog" aria-labelledby="legacy-unit-title">
+    <form id="legacy-unit-form"><h2 id="legacy-unit-title">Rename Legacy Unit</h2>
+      <p class="hint">The unit definition and every matching name in this workbook’s formulas will be renamed together. Labels stay unchanged. Undo restores the previous definition and formulas.</p>
+      <label for="legacy-unit-name">Reserved unit name</label><select id="legacy-unit-name"></select>
+      <label for="legacy-unit-new-name">New unit name</label><input id="legacy-unit-new-name" required maxlength="20" autocomplete="off">
+      <p id="legacy-unit-error" role="alert"></p>
+      <div class="new-workbook-actions"><button id="cancel-legacy-unit" type="button">Cancel</button><button type="submit" class="primary">Rename Unit &amp; Formulas</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="fill-dialog" class="new-workbook-dialog" aria-labelledby="fill-title">
+    <form id="fill-form">
+      <h2 id="fill-title">Fill Down</h2>
+      <p class="hint">Shift-click a second cell to select a rectangle. Relative references move down; $A$1 stays fixed. A multi-row source repeats its pattern.</p>
+      <label for="fill-source">Source cell or range</label><input id="fill-source" type="text" required autocomplete="off" placeholder="B2:D2">
+      <label for="fill-last-row">Fill through row</label><input id="fill-last-row" type="number" min="2" required>
+      <p id="fill-summary" role="status"></p>
+      <p id="fill-error" class="new-workbook-error" role="alert" hidden></p>
+      <div class="import-preview-scroll"><table id="fill-preview" aria-label="Fill preview, first eight cells"></table></div>
+      <p class="hint">Existing destination cells, including those filled from a blank source, will be replaced. Undo restores the whole fill.</p>
+      <div class="new-workbook-actions"><button id="cancel-fill" type="button">Cancel</button><button id="fill-confirm" type="submit" class="primary" disabled>Fill Down</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="import-dialog" class="new-workbook-dialog import-dialog" aria-labelledby="import-title">
+    <form id="import-form">
+      <h2 id="import-title">Import Workbook</h2>
+      <label for="import-file">JSON, CSV or XLSX file</label>
+      <input id="import-file" type="file" accept=".json,.csv,.xlsx" required>
+      <div id="import-sheet-wrap" hidden><label for="import-sheet">Source worksheet</label><select id="import-sheet"></select></div>
+      <div id="import-csv-options" hidden>
+        <label for="import-delimiter">CSV delimiter</label><select id="import-delimiter"><option value="auto">Auto-detect</option><option value=",">Comma</option><option value=";">Semicolon</option><option value="&#9;">Tab</option></select>
+        <label class="check-label"><input id="import-formulas" type="checkbox" checked>Evaluate fields beginning with = as AliceMath formulas</label>
+        <label class="check-label"><input id="import-numbers-text" type="checkbox">Keep numeric-looking fields as text</label>
+      </div>
+      <label for="import-target">Destination</label><select id="import-target"><option value="new">New workbook</option><option value="current">Replace current grid (undoable)</option></select>
+      <label for="import-name">New workbook name</label><input id="import-name" maxlength="80" autocomplete="off">
+      <p id="import-summary" role="status"></p>
+      <p id="import-error" class="new-workbook-error" role="alert" hidden></p>
+      <div class="import-preview-scroll"><table id="import-preview" aria-label="Import preview, first eight rows and six columns"></table></div>
+      <ul id="import-warnings"></ul>
+      <div class="new-workbook-actions"><button id="cancel-import" type="button">Cancel</button><button id="import-confirm" type="submit" class="primary" disabled>Import Workbook</button></div>
+    </form>
+  </dialog>
+
   <footer class="statusbar">
     <a class="footer-share footer-github" href="https://github.com/dskhanal/alice-maths" target="_blank" rel="noopener noreferrer" aria-label="AliceMath repository on GitHub">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2.14c-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.16 1.18a11.04 11.04 0 0 1 5.75 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.58.23 2.75.11 3.04.73.8 1.18 1.83 1.18 3.08 0 4.41-2.68 5.39-5.24 5.68.41.36.78 1.06.78 2.14v3.14c0 .31.21.68.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
@@ -185,15 +255,24 @@
     </a>
     <a class="footer-share" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fjstest.host%2Falice-maths%2F" target="_blank" rel="noopener noreferrer">Share on LinkedIn ↗</a>
     <div>
-      <strong>Engine:</strong> <code>AliceMath</code> (<code>Q</code>, <code>V</code>, <code>Parser</code>) · Arbitrary-Precision Rational &amp; Dimensional Algebra
+      <strong>Engine:</strong> <code>AliceMath</code> (<code>Q</code>, <code>V</code>, <code>Parser</code>) · Exact BigInt Rational &amp; Dimensional Algebra · 4,096-bit budget
     </div>
     <div>
       <strong>Attribution:</strong> Based on <em>Alice by San</em> · Non-Commercial Attribution License (CC BY-NC 4.0)
     </div>
   </footer>
 
-  <script src="alice-math.min.js"></script>
-  <script src="workbooks.js"></script>
-  <script src="app.js"></script>
+  <script src="alice-math.min.js?v=1.0.2-r3"></script>
+  <script src="vendor/decimal.js?v=1.0.2-r3"></script>
+  <script src="alice-approx.js?v=1.0.2-r3"></script>
+  <script src="workbooks.js?v=1.0.2-r3"></script>
+  <script src="workbook-history.js?v=1.0.2-r3"></script>
+  <script src="xlsx-safe-zip.js?v=1.0.2-r3"></script>
+  <script src="workbook-io.js?v=1.0.2-r3"></script>
+  <script src="spreadsheet-tools.js?v=1.0.2-r3"></script>
+  <script src="workbook-storage.js?v=1.0.2-r3"></script>
+  <script src="app.js?v=1.0.2-r3"></script>
+  <script src="spreadsheet-tools-ui.js?v=1.0.2-r3"></script>
+  <script src="workbook-import-ui.js?v=1.0.2-r3"></script>
 </body>
 </html>

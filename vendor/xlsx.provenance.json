@@ -1,0 +1,8 @@
+{
+  "name": "SheetJS CE",
+  "version": "0.20.3",
+  "source": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+  "archiveSha256": "8dc73fc3b00203e72d176e85b50938627c7b086e607c682e8d3c22c02bb99fe8",
+  "sha256": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41",
+  "license": "Apache-2.0"
+}

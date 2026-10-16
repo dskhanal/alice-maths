@@ -1,0 +1,28 @@
+{
+  "schema": "alice.approx-reference/v1",
+  "seed": 20261016,
+  "total": 648,
+  "passed": 648,
+  "groups": {
+    "constants": 8,
+    "trigonometry": 152,
+    "units": 8,
+    "square-roots": 120,
+    "exponentials": 120,
+    "logarithms": 120,
+    "sigmoid": 120
+  },
+  "precisions": [
+    20,
+    34,
+    50,
+    100
+  ],
+  "oracle": "Python Decimal sqrt/exp/ln; Machin pi; Taylor sin/cos",
+  "generatedAt": "2026-10-15T23:31:39.876108+00:00",
+  "python": "3.14.8",
+  "node": "v25.9.0",
+  "failures": [],
+  "adapterSha256": "b8d6f01af8fd4fb8308249599d1612fca64cebce5ae02fe20445d14894303f9c",
+  "decimalSha256": "6e99821f8204c5f611b56077e3fce056a1562d22bc341a1f4af01afe7e527d83"
+}

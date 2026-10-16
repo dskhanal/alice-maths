@@ -24,7 +24,7 @@ const SCENARIO_WORKBOOKS = {
   },
   robotics: {
     title: 'Workbook 5 · Robotics Calibration & Timing',
-    summary: 'Exact encoder ratios, rational tick periods, actuator work and scalar calibration. Trigonometric poses and transformation matrices appear as explicit boundaries.',
+    summary: 'Exact encoder ratios, rational tick periods, actuator work and scalar calibration. Trigonometric poses require approximate mode; transformation matrices remain unsupported.',
     rows: [
       ['Encoder travel per tick', '=0.32 m', '=2048', '=B2/C2', '=convert D2 to mm', 'Assumed exact 0.32 m travel per revolution, not a circumference inferred from π.', '0.00015625 m'],
       ['Encoder displacement', '=D2', '=1536', '=B3*C3', '=convert D3 to mm', '1536 ticks correspond to 240 mm exactly.', '0.24 m'],
@@ -102,7 +102,7 @@ const SCENARIO_WORKBOOKS = {
       ['Asset B variance contribution', '=2/5', '=(1/5)^2', '=B17^2*C17', '=D17*10000', 'Weight 40%, volatility 20%; variance contribution is w² × sigma².', '0.0064'],
       ['Covariance contribution', '=1/2', '=(1/10)*(1/5)', '=2*B16*B17*B18*C18', '=D18/2', 'Correlation 0.5 gives the cross term 2 × wA × wB × rho × sigmaA × sigmaB.', '0.0048'],
       ['Portfolio variance', '=SUM(D16:D18)', '=100000^2', '=B19*C19', '=B19', 'Return variance is 0.0148; a 100000 portfolio has loss variance 148000000 currency units squared.', '148000000.0'],
-      ['Volatility: irrational limit', '=B19', 'square root of variance', '=sqrt(B20)', '', 'Expected limit: sqrt(0.0148) is irrational. Reporting volatility requires an explicitly approximate numeric mode.', 'Square root is irrational; exact rational results only.'],
+      ['Volatility: irrational limit', '=B19', 'square root of variance', '=sqrt(B20)', '', 'Expected limit: sqrt(0.0148) is irrational. Choose Allow approximations to calculate decimal volatility.', 'Square root is irrational; exact rational results only.'],
       ['Recovery-driven stress', '=B10', '=20%', '=B21*C10*(1-C21)', '=D21-D11', 'A 20% recovery assumption means 80% LGD; expected loss rises to 1600.', '1600.0'],
       ['Reserve coverage fraction', '=1500', '=D14', '=B22/C22', '=D22*C22', 'Reserve / combined expected loss remains exactly 40/59 before reporting-rounding rules.', '40/59'],
       ['Zero-loss ratio guard', '=1500', '=0', '=B23/C23', '', 'Expected limit: reserve coverage has no defined ratio when the denominator is zero.', 'undefined']
@@ -153,7 +153,7 @@ const SCENARIO_WORKBOOKS = {
       ['Solve initial thrust target', '=B2/(1 kg)', '=15', '=solve x/B22-B5/(1 m/s^2)=C22', '=D22*1 n', 'Normalize SI values, solve thrust for an initial net acceleration of 15 m/s², then restore newtons.', 'x = 25000'],
       ['Coast apex after engine cutoff', '=D20', '=D19', '=B23+C23^2/(2*B5)', '=convert D23 to m', 'Cut thrust at the final discrete state; constant gravity and no drag give an exact rational additional rise.', '(18687568715015/994012988004) m'],
       ['Nonlinear time solve boundary', 'unknown time squared', 'analytic ascent', '=solve 5*x*x=100', '', 'A quadratic time solve exceeds the affine solver. This intentional limit has a yellow calculation comment.', 'Only linear equations are supported.'],
-      ['Atmospheric density boundary', 'exponential atmosphere', 'Inspect the exact result and its rational representation.', '=exp(-1/10)', '', 'Exponential density and trigonometric gravity turns require a broader approximate numerical engine.', 'Unsupported expression'],
+      ['Atmospheric density boundary', 'exponential atmosphere', 'Inspect the exact result and its rational representation.', '=exp(-1/10)', '', 'Exponential density and trigonometric expressions require Allow approximations. This workbook still does not integrate a gravity-turn trajectory.', 'Unsupported expression'],
       ['Remaining propellant check', '=D2-D18', '=B4*(3*B6)', '=B26-C26', '=D18/D2', 'Mass loss reconciles exactly to zero. The model does not permit extrapolation past dry mass; no dry-mass input is supplied.', '0 kg']
     ]
   },
@@ -177,7 +177,7 @@ const SCENARIO_WORKBOOKS = {
   },
   regression: {
     title: 'Workbook 13 · Linear Regression & Logistic Odds',
-    summary: 'Fit y = intercept + slope × x by ordinary least squares using four exact rational observations. Then calculate logistic-model probabilities from supplied baseline odds and an odds ratio. The logistic section does not estimate coefficients: logit-space fitting, standard errors and iterative maximum likelihood require functions outside this engine. All examples use dimensionless educational inputs.',
+    summary: 'Fit y = intercept + slope × x by ordinary least squares using four exact rational observations. Then calculate logistic-model probabilities from supplied baseline odds and an odds ratio. The logistic section does not estimate coefficients: logit-space fitting, standard errors and iterative maximum likelihood remain unsupported. Logarithms and exponentials can be evaluated in approximate mode. All examples use dimensionless educational inputs.',
     rows: [
       ['Observation 1', '=1', '=2', '=B2*C2', '=B2^2', 'B is predictor x, C is observed response y, D is xy and E is x².', '2.0'],
       ['Observation 2', '=2', '=3', '=B3*C3', '=B3^2', 'Edit any B2:C5 observation to refit the linear model.', '6.0'],
@@ -201,9 +201,53 @@ const SCENARIO_WORKBOOKS = {
       ['Logistic probability at x = 2', '=2', '=D17*D18^B21', '=C21/(1+C21)', '=D21/(1-D21)', 'At two steps, odds are 9/16 and probability is 9/25.', '0.36'],
       ['Logistic probability at x = −1', '=-1', '=D17*D18^B22', '=C22/(1+C22)', '=D22/(1-D22)', 'A negative integer step divides baseline odds by the odds ratio, giving p = 1/7.', '1/7'],
       ['Logistic probability at x = 3', '=3', '=D17*D18^B23', '=C23/(1+C23)', '=D23/(1-D23)', 'At three steps, odds are 27/32 and probability is 27/59. Exponents must stay within −10…10.', '27/59'],
-      ['Logit coefficient boundary', '=D18', 'requires natural log', '=log(B24)', '', 'Estimating or converting logit coefficients requires logarithms. Exact rational logarithms are outside this engine.', 'Unsupported expression'],
-      ['Sigmoid expression boundary', '=1', 'requires exponential', '=1/(1+exp(-B25))', '', 'The usual sigmoid and iterative logistic fitting need an approximate numerical engine. The odds rows above avoid exp only because rational odds and integer steps were supplied.', 'Unsupported expression'],
+      ['Logit coefficient boundary', '=D18', 'requires natural log', '=log(B24)', '', 'Estimating or converting logit coefficients requires logarithms. Choose Allow approximations for decimal logarithms; coefficient fitting is a separate feature.', 'Unsupported expression'],
+      ['Sigmoid expression boundary', '=1', 'requires exponential', '=1/(1+exp(-B25))', '', 'Choose Allow approximations to evaluate this sigmoid. Iterative logistic fitting remains unsupported. The odds rows above avoid exp only because rational odds and integer steps were supplied.', 'Unsupported expression'],
       ['Linear residual reconciliation', '=SUM(D9:D12)', '=0', '=B26-C26', '=D26^2', 'Zero verifies the residual sum for the fitted intercept model. No hypothesis tests or confidence intervals are provided.', '0.0']
+    ]
+  },
+  approximations: {
+    title: 'Workbook 14 · Irrationals & Decimal Precision',
+    summary: 'Start in Exact only mode to see the rational boundary. Choose Allow approximations and 20, 34, 50 or 100 significant digits to evaluate pi, e, irrational roots, logarithms and trigonometry. Every decimal-derived result retains ≈, including dependent cells. Precision controls rounding; it is not a certified error bound for ill-conditioned expressions. Trigonometric arguments are dimensionless radians.',
+    rows: [
+      ['Irrational square root', '=2', 'choose Allow approximations', '=sqrt(B2)', '', 'sqrt(2) is unsupported in Exact only mode and becomes a clearly marked decimal approximation when enabled.', 'Unsupported expression'],
+      ['Circle constant', 'pi or π', 'dimensionless constant', '=pi', '', 'Pi is evaluated at the selected decimal precision. It is never stored as an exact fraction.', 'Unsupported expression'],
+      ['Euler constant', 'e', 'dimensionless constant', '=e', '', 'e is available in approximate mode, with the same ≈ label and precision metadata.', 'Unsupported expression'],
+      ['Natural logarithm', '=2', 'ln and log mean natural log', '=ln(B5)', '', 'Logarithms require a positive dimensionless argument. ln and log are aliases for natural logarithm.', 'Unsupported expression'],
+      ['Circle area', '=2 m', 'pi times radius squared', '=pi*B6^2', '', 'The area keeps SI dimension [2, 0, 0] while the magnitude is approximate.', 'Unsupported expression'],
+      ['Convert an approximate length', '=2 m^2', 'square root then centimetres', '=convert sqrt(B7) to cm', '', 'The displayed centimetre magnitude and underlying SI metre magnitude are stored separately.', 'Unsupported expression'],
+      ['Reuse converted result', '=D7', '=1 m', '=B8/C8', '', 'A reference to D7 must reuse its metre magnitude, not its displayed centimetre magnitude. The result remains approximate.', 'Unsupported expression'],
+      ['Exact rational remains exact', '=1/3', '=1/6', '=B9+C9', '=D9*2', 'Enabling approximate mode does not replace successful exact calculations.', '0.5'],
+      ['Perfect root remains exact', '=9/16', 'rational square root', '=sqrt(B10)', '=D10^2-B10', 'An exact square root stays 0.75 (3/4) and has no ≈ marker.', '0.75'],
+      ['Approximation stays labelled', '=D2', '=D2', '=B11*C11', '', 'Squaring the approximate sqrt(2) may display ≈ 2; it is not promoted to an exact rational.', 'Unsupported expression'],
+      ['Sine in radians', 'pi/6', 'no degree units', '=sin(pi/6)', '', 'This may display ≈ 0.5. The decimal computation is still marked approximate.', 'Unsupported expression'],
+      ['Logistic sigmoid', '=1', 'exp-based probability', '=1/(1+exp(-B13))', '', 'The usual sigmoid is now available as a decimal calculation. Logistic coefficient fitting is a separate feature.', 'Unsupported expression'],
+      ['Dimensionless function guard', '=2 m', 'invalid exponential argument', '=exp(B14)', '', 'Even with approximations enabled, exp requires a dimensionless argument; a length cannot be supplied.', 'Unsupported expression'],
+      ['Compatible-unit guard', '=sqrt(2 m^2)', '=1 s', '=B15+C15', '', 'Approximate mode retains dimension checking and rejects adding a length to a duration.', 'Unsupported expression'],
+      ['Approximate solver boundary', '=D2', 'exact solver remains unchanged', '=solve B16*x=1', '', 'Equations requiring approximate coefficients remain unsupported; the existing exact linear solver is unchanged.', 'Unsupported expression']
+    ]
+  },
+  functions: {
+    title: 'Workbook 15 · Exact Rounding & Fill-Down',
+    summary: 'Exact scalar functions, rectangular averages and reference copying. ROUND uses ties away from zero; FLOOR rounds toward negative infinity. Shift-click a rectangle, then Fill Down to preview relative and fixed references.',
+    rows: [
+      ['Decimal halfway, positive', '=1.005', '=1', '=ROUND(B2*C2,2)', '=D2*100', 'ROUND decides the exact halfway case from a rational, producing 1.01.', '1.01'],
+      ['Decimal halfway, negative', '=-1.005', '=1', '=ROUND(B3*C3,2)', '=D3*100', 'A negative halfway case rounds away from zero to -1.01.', '-1.01'],
+      ['Exact thirds to ten places', '=1/3', '=10', '=ROUND(B4,C4)', '=D4*3', 'Explicit rounding changes the value to an exact finite decimal; keep B4 for the original third.', '0.3333333333'],
+      ['Nearest hundred', '=250', '=-2', '=ROUND(B5,C5)', '=D5/100', 'Negative decimal places round to powers of ten: 250 becomes 300.', '300.0'],
+      ['Floor a negative fraction', '=-1/3', 'toward negative infinity', '=FLOOR(B6)', '=D6+1', 'FLOOR takes one dimensionless value. -1/3 becomes -1, not zero.', '-1.0'],
+      ['Nested functions', '=1.2345', '=3', '=ROUND(ROUND(B7,C7),2)', '', 'Rounding first to 1.235 and then to 1.24 is intentionally different from rounding only once.', '1.24'],
+      ['Greatest common divisor', '=84', '=-30', '=GCD(B8,C8)', '=B8/D8', 'Signs are ignored. Fractions are rejected rather than truncated.', '6.0'],
+      ['Least common multiple', '=17', '=19', '=LCM(B9,C9,23)', '=D9/17/19/23', 'Coprime denominators combine to the exact integer 7429.', '7429.0'],
+      ['AVERAGE rectangular range', '=1/3', '=2/3', '=AVERAGE(B10:C10)', '=SUM(B10:C10)', 'AVERAGE is an alias for AVG; all referenced cells must contain calculable values.', '0.5'],
+      ['Average compatible lengths', '=1 m', '=200 cm', '=AVERAGE(B11:C11)', '=convert D11 to cm', 'The average is 1.5 m; dimensions remain checked.', '1.5 m'],
+      ['Absolute row and column', '=12.345', '=2', '=ROUND(B12*$C$12,2)', '=D12/2', 'Try Fill Down with source D12 and last row 14. B12 moves; $C$12 remains fixed. Undo restores the examples.', '24.69'],
+      ['Next fill input', '=5.125', '=99', '=ROUND(B13*$C$12,2)', '', 'The fixed multiplier is still C12 = 2, giving 10.25.', '10.25'],
+      ['Third fill input', '=7.875', '=99', '=ROUND(B14*$C$12,2)', '', 'A repeated reference uses C12 rather than the neighbouring 99.', '15.75'],
+      ['Unit rounding guard', '=12.3 m', 'choose a unit explicitly', '=ROUND(B15,0)', '', 'Use ROUND(B15/(1 cm),0)*(1 cm) to round a length in centimetres.', 'Unsupported expression'],
+      ['Integer-only GCD guard', '=1/2', '=2', '=GCD(B16,C16)', '', 'Integer functions do not discard the fractional part.', 'Unsupported expression'],
+      ['Incompatible average guard', '=1 m', '=2 s', '=AVERAGE(B17:C17)', '', 'AVERAGE preserves the compatible-unit check.', 'Addition requires compatible units.'],
+      ['Approximate rounding guard', 'enable approximate mode', 'sqrt(2)', '=ROUND(sqrt(2),2)', '', 'These scalar helpers require exact rational inputs. Approximate values are never promoted to exact decimals.', 'Unsupported expression']
     ]
   },
   precision: {

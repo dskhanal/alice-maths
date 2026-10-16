@@ -1,0 +1,91 @@
+{
+  "schema": "alice.engine-benchmark/v1",
+  "seed": 20261016,
+  "generatedAt": "2026-10-15T20:31:58.150805+00:00",
+  "engineSha256": "c4b71f8773097f869f79c2e1bf5d3bbe5242b9841d12b7ff589cef78314ddbb6",
+  "suiteDatasetSha256": "86b6b86af82f4e9677a18271ac333db40d90d9de19d582eefc03a59fb27254bd",
+  "correctnessPassed": 1128,
+  "environment": {
+    "node": "v25.9.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4",
+    "python": "3.14.8"
+  },
+  "timedWork": "AliceMath.calculate: parsing, exact arithmetic and output formatting",
+  "excludedWork": "Oracle generation, Node startup, JSON transport, browser rendering and spreadsheet recalculation",
+  "profiles": [
+    {
+      "name": "arithmetic",
+      "uniqueCases": 500,
+      "casesPerSample": 12500,
+      "batches": 25,
+      "datasetSha256": "764d0b58f162b6ea207cbc11385284de31bc9ca862d33a42ea4df03a39e5d60e",
+      "warmups": 2,
+      "repeats": 7,
+      "samplesMs": [
+        67.080375,
+        67.14525,
+        67.095333,
+        66.431208,
+        66.288,
+        67.694333,
+        66.9215
+      ],
+      "medianMs": 67.080375,
+      "minMs": 66.288,
+      "maxMs": 67.694333,
+      "medianAbsoluteDeviationMs": 0.15887500000000898,
+      "medianCalculationsPerSecond": 186343.62136466886,
+      "checksum": 499075
+    },
+    {
+      "name": "linear",
+      "uniqueCases": 100,
+      "casesPerSample": 2500,
+      "batches": 25,
+      "datasetSha256": "cb4708d14d05fac2785ccb0ae3a15cee1c43b195f6038835656f0bd5e962f426",
+      "warmups": 2,
+      "repeats": 7,
+      "samplesMs": [
+        16.197125,
+        15.20375,
+        14.023167,
+        13.735916,
+        13.705458,
+        14.492417,
+        14.64275
+      ],
+      "medianMs": 14.492417,
+      "minMs": 13.705458,
+      "maxMs": 16.197125,
+      "medianAbsoluteDeviationMs": 0.7113329999999998,
+      "medianCalculationsPerSecond": 172504.0067505648,
+      "checksum": 53775
+    },
+    {
+      "name": "conversion",
+      "uniqueCases": 100,
+      "casesPerSample": 2500,
+      "batches": 25,
+      "datasetSha256": "6f6562cd542119cf3d2816d61da29515a1648a24a5fb0a30a645e30a6a2fa97c",
+      "warmups": 2,
+      "repeats": 7,
+      "samplesMs": [
+        10.029583,
+        11.243583,
+        10.899666,
+        9.91525,
+        9.853458,
+        10.38525,
+        10.072291
+      ],
+      "medianMs": 10.072291,
+      "minMs": 9.853458,
+      "maxMs": 11.243583,
+      "medianAbsoluteDeviationMs": 0.21883300000000006,
+      "medianCalculationsPerSecond": 248205.6962015891,
+      "checksum": 47100
+    }
+  ]
+}
